@@ -49,7 +49,7 @@ namespace RPLIDAR_Mapping {
         
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("nyUu4MgAWhTG")]
+        [global::System.Configuration.DefaultSettingValueAttribute("")]
         public string WiFiPassword {
             get {
                 return ((string)(this["WiFiPassword"]));
@@ -61,7 +61,7 @@ namespace RPLIDAR_Mapping {
         
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("Telia-2G-B9A841")]
+        [global::System.Configuration.DefaultSettingValueAttribute("")]
         public string WiFiSSID {
             get {
                 return ((string)(this["WiFiSSID"]));

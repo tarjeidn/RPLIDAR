@@ -1,0 +1,441 @@
+{
+  "Version": 1,
+  "WorkspaceRootPath": "E:\\c#\\RPLIDAR\\",
+  "Documents": [
+    {
+      "AbsoluteMoniker": "D:0:0:{1F5E7C25-4B23-4362-9D39-2C8CBDA62A96}|RPLIDAR Mapping\\RPLIDAR Mapping.csproj|E:\\c#\\RPLIDAR\\rplidar mapping\\appsettings.settings||{6D2695F9-5365-4A78-89ED-F205C045BFE6}",
+      "RelativeMoniker": "D:0:0:{1F5E7C25-4B23-4362-9D39-2C8CBDA62A96}|RPLIDAR Mapping\\RPLIDAR Mapping.csproj|solutionrelative:rplidar mapping\\appsettings.settings||{6D2695F9-5365-4A78-89ED-F205C045BFE6}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A16061AD-0D54-4206-BA5C-00DCF757C796}|RPLIDAR\\RPLIDAR.vcxproj|E:\\c#\\RPLIDAR\\RPLIDAR\\RPLIDAR.ino||{8B382828-6202-11D1-8870-0000F87579D2}",
+      "RelativeMoniker": "D:0:0:{A16061AD-0D54-4206-BA5C-00DCF757C796}|RPLIDAR\\RPLIDAR.vcxproj|solutionrelative:RPLIDAR\\RPLIDAR.ino||{8B382828-6202-11D1-8870-0000F87579D2}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{1F5E7C25-4B23-4362-9D39-2C8CBDA62A96}|RPLIDAR Mapping\\RPLIDAR Mapping.csproj|e:\\c#\\rplidar\\rplidar mapping\\features\\communications\\device.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{1F5E7C25-4B23-4362-9D39-2C8CBDA62A96}|RPLIDAR Mapping\\RPLIDAR Mapping.csproj|solutionrelative:rplidar mapping\\features\\communications\\device.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{1F5E7C25-4B23-4362-9D39-2C8CBDA62A96}|RPLIDAR Mapping\\RPLIDAR Mapping.csproj|e:\\c#\\rplidar\\rplidar mapping\\core\\mapplication.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{1F5E7C25-4B23-4362-9D39-2C8CBDA62A96}|RPLIDAR Mapping\\RPLIDAR Mapping.csproj|solutionrelative:rplidar mapping\\core\\mapplication.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{1F5E7C25-4B23-4362-9D39-2C8CBDA62A96}|RPLIDAR Mapping\\RPLIDAR Mapping.csproj|e:\\c#\\rplidar\\rplidar mapping\\features\\communications\\serialcom.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{1F5E7C25-4B23-4362-9D39-2C8CBDA62A96}|RPLIDAR Mapping\\RPLIDAR Mapping.csproj|solutionrelative:rplidar mapping\\features\\communications\\serialcom.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{1F5E7C25-4B23-4362-9D39-2C8CBDA62A96}|RPLIDAR Mapping\\RPLIDAR Mapping.csproj|e:\\c#\\rplidar\\rplidar mapping\\.gitignore||{3B902123-F8A7-4915-9F01-361F908088D0}",
+      "RelativeMoniker": "D:0:0:{1F5E7C25-4B23-4362-9D39-2C8CBDA62A96}|RPLIDAR Mapping\\RPLIDAR Mapping.csproj|solutionrelative:rplidar mapping\\.gitignore||{3B902123-F8A7-4915-9F01-361F908088D0}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{1F5E7C25-4B23-4362-9D39-2C8CBDA62A96}|RPLIDAR Mapping\\RPLIDAR Mapping.csproj|e:\\c#\\rplidar\\rplidar mapping\\core\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{1F5E7C25-4B23-4362-9D39-2C8CBDA62A96}|RPLIDAR Mapping\\RPLIDAR Mapping.csproj|solutionrelative:rplidar mapping\\core\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{1F5E7C25-4B23-4362-9D39-2C8CBDA62A96}|RPLIDAR Mapping\\RPLIDAR Mapping.csproj|e:\\c#\\rplidar\\rplidar mapping\\features\\map\\gridmodel\\gridmanager.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{1F5E7C25-4B23-4362-9D39-2C8CBDA62A96}|RPLIDAR Mapping\\RPLIDAR Mapping.csproj|solutionrelative:rplidar mapping\\features\\map\\gridmodel\\gridmanager.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{1F5E7C25-4B23-4362-9D39-2C8CBDA62A96}|RPLIDAR Mapping\\RPLIDAR Mapping.csproj|e:\\c#\\rplidar\\rplidar mapping\\features\\map\\gridmodel\\grid.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{1F5E7C25-4B23-4362-9D39-2C8CBDA62A96}|RPLIDAR Mapping\\RPLIDAR Mapping.csproj|solutionrelative:rplidar mapping\\features\\map\\gridmodel\\grid.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{1F5E7C25-4B23-4362-9D39-2C8CBDA62A96}|RPLIDAR Mapping\\RPLIDAR Mapping.csproj|e:\\c#\\rplidar\\rplidar mapping\\features\\map\\gridmodel\\tile.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{1F5E7C25-4B23-4362-9D39-2C8CBDA62A96}|RPLIDAR Mapping\\RPLIDAR Mapping.csproj|solutionrelative:rplidar mapping\\features\\map\\gridmodel\\tile.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{1F5E7C25-4B23-4362-9D39-2C8CBDA62A96}|RPLIDAR Mapping\\RPLIDAR Mapping.csproj|e:\\c#\\rplidar\\rplidar mapping\\features\\map\\statistics\\mapstats.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{1F5E7C25-4B23-4362-9D39-2C8CBDA62A96}|RPLIDAR Mapping\\RPLIDAR Mapping.csproj|solutionrelative:rplidar mapping\\features\\map\\statistics\\mapstats.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{1F5E7C25-4B23-4362-9D39-2C8CBDA62A96}|RPLIDAR Mapping\\RPLIDAR Mapping.csproj|e:\\c#\\rplidar\\rplidar mapping\\features\\map\\map.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{1F5E7C25-4B23-4362-9D39-2C8CBDA62A96}|RPLIDAR Mapping\\RPLIDAR Mapping.csproj|solutionrelative:rplidar mapping\\features\\map\\map.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{1F5E7C25-4B23-4362-9D39-2C8CBDA62A96}|RPLIDAR Mapping\\RPLIDAR Mapping.csproj|e:\\c#\\rplidar\\rplidar mapping\\features\\map\\maprenderer.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{1F5E7C25-4B23-4362-9D39-2C8CBDA62A96}|RPLIDAR Mapping\\RPLIDAR Mapping.csproj|solutionrelative:rplidar mapping\\features\\map\\maprenderer.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{1F5E7C25-4B23-4362-9D39-2C8CBDA62A96}|RPLIDAR Mapping\\RPLIDAR Mapping.csproj|e:\\c#\\rplidar\\rplidar mapping\\utilities\\utility.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{1F5E7C25-4B23-4362-9D39-2C8CBDA62A96}|RPLIDAR Mapping\\RPLIDAR Mapping.csproj|solutionrelative:rplidar mapping\\utilities\\utility.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{1F5E7C25-4B23-4362-9D39-2C8CBDA62A96}|RPLIDAR Mapping\\RPLIDAR Mapping.csproj|e:\\c#\\rplidar\\rplidar mapping\\features\\map\\distributor.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{1F5E7C25-4B23-4362-9D39-2C8CBDA62A96}|RPLIDAR Mapping\\RPLIDAR Mapping.csproj|solutionrelative:rplidar mapping\\features\\map\\distributor.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{1F5E7C25-4B23-4362-9D39-2C8CBDA62A96}|RPLIDAR Mapping\\RPLIDAR Mapping.csproj|e:\\c#\\rplidar\\rplidar mapping\\features\\map\\algorithms\\icp.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{1F5E7C25-4B23-4362-9D39-2C8CBDA62A96}|RPLIDAR Mapping\\RPLIDAR Mapping.csproj|solutionrelative:rplidar mapping\\features\\map\\algorithms\\icp.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{1F5E7C25-4B23-4362-9D39-2C8CBDA62A96}|RPLIDAR Mapping\\RPLIDAR Mapping.csproj|e:\\c#\\rplidar\\rplidar mapping\\utilities\\logger.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{1F5E7C25-4B23-4362-9D39-2C8CBDA62A96}|RPLIDAR Mapping\\RPLIDAR Mapping.csproj|solutionrelative:rplidar mapping\\utilities\\logger.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{1F5E7C25-4B23-4362-9D39-2C8CBDA62A96}|RPLIDAR Mapping\\RPLIDAR Mapping.csproj|e:\\c#\\rplidar\\rplidar mapping\\features\\map\\statistics\\gridstats.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{1F5E7C25-4B23-4362-9D39-2C8CBDA62A96}|RPLIDAR Mapping\\RPLIDAR Mapping.csproj|solutionrelative:rplidar mapping\\features\\map\\statistics\\gridstats.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{1F5E7C25-4B23-4362-9D39-2C8CBDA62A96}|RPLIDAR Mapping\\RPLIDAR Mapping.csproj|e:\\c#\\rplidar\\rplidar mapping\\features\\map\\ui\\guimanager.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{1F5E7C25-4B23-4362-9D39-2C8CBDA62A96}|RPLIDAR Mapping\\RPLIDAR Mapping.csproj|solutionrelative:rplidar mapping\\features\\map\\ui\\guimanager.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{1F5E7C25-4B23-4362-9D39-2C8CBDA62A96}|RPLIDAR Mapping\\RPLIDAR Mapping.csproj|e:\\c#\\rplidar\\rplidar mapping\\utilities\\contentmanagerprovider.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{1F5E7C25-4B23-4362-9D39-2C8CBDA62A96}|RPLIDAR Mapping\\RPLIDAR Mapping.csproj|solutionrelative:rplidar mapping\\utilities\\contentmanagerprovider.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{1F5E7C25-4B23-4362-9D39-2C8CBDA62A96}|RPLIDAR Mapping\\RPLIDAR Mapping.csproj|e:\\c#\\rplidar\\rplidar mapping\\utilities\\statisticsprovider.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{1F5E7C25-4B23-4362-9D39-2C8CBDA62A96}|RPLIDAR Mapping\\RPLIDAR Mapping.csproj|solutionrelative:rplidar mapping\\utilities\\statisticsprovider.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{1F5E7C25-4B23-4362-9D39-2C8CBDA62A96}|RPLIDAR Mapping\\RPLIDAR Mapping.csproj|e:\\c#\\rplidar\\rplidar mapping\\utilities\\graphicsdeviceprovider.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{1F5E7C25-4B23-4362-9D39-2C8CBDA62A96}|RPLIDAR Mapping\\RPLIDAR Mapping.csproj|solutionrelative:rplidar mapping\\utilities\\graphicsdeviceprovider.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{1F5E7C25-4B23-4362-9D39-2C8CBDA62A96}|RPLIDAR Mapping\\RPLIDAR Mapping.csproj|e:\\c#\\rplidar\\rplidar mapping\\utilities\\inputmanager.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{1F5E7C25-4B23-4362-9D39-2C8CBDA62A96}|RPLIDAR Mapping\\RPLIDAR Mapping.csproj|solutionrelative:rplidar mapping\\utilities\\inputmanager.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{1F5E7C25-4B23-4362-9D39-2C8CBDA62A96}|RPLIDAR Mapping\\RPLIDAR Mapping.csproj|e:\\c#\\rplidar\\rplidar mapping\\features\\communications\\wireless.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{1F5E7C25-4B23-4362-9D39-2C8CBDA62A96}|RPLIDAR Mapping\\RPLIDAR Mapping.csproj|solutionrelative:rplidar mapping\\features\\communications\\wireless.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{1F5E7C25-4B23-4362-9D39-2C8CBDA62A96}|RPLIDAR Mapping\\RPLIDAR Mapping.csproj|e:\\c#\\rplidar\\rplidar mapping\\rplidar mapping.csproj||{FA3CD31E-987B-443A-9B81-186104E8DAC1}|",
+      "RelativeMoniker": "D:0:0:{1F5E7C25-4B23-4362-9D39-2C8CBDA62A96}|RPLIDAR Mapping\\RPLIDAR Mapping.csproj|solutionrelative:rplidar mapping\\rplidar mapping.csproj||{FA3CD31E-987B-443A-9B81-186104E8DAC1}|"
+    }
+  ],
+  "DocumentGroupContainers": [
+    {
+      "Orientation": 0,
+      "VerticalTabListWidth": 256,
+      "DocumentGroups": [
+        {
+          "DockedWidth": 200,
+          "SelectedChildIndex": 10,
+          "Children": [
+            {
+              "$type": "Bookmark",
+              "Name": "ST:2:0:{dcc4ea97-1c0c-482b-b205-e541c0df9728}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{8d203c9f-1a05-4449-89e6-a81bff43d44e}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{aa2115a1-9712-457b-9047-dbb71ca2cdd2}"
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:128:0:{75188d03-9892-4ae2-abf1-207126247ce5}"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 16,
+              "Title": "Logger.cs",
+              "DocumentMoniker": "E:\\c#\\RPLIDAR\\RPLIDAR Mapping\\Utilities\\Logger.cs",
+              "RelativeDocumentMoniker": "RPLIDAR Mapping\\Utilities\\Logger.cs",
+              "ToolTip": "E:\\c#\\RPLIDAR\\RPLIDAR Mapping\\Utilities\\Logger.cs",
+              "RelativeToolTip": "RPLIDAR Mapping\\Utilities\\Logger.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-02-24T19:15:00.899Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 12,
+              "Title": "MapRenderer.cs",
+              "DocumentMoniker": "E:\\c#\\RPLIDAR\\RPLIDAR Mapping\\Features\\Map\\MapRenderer.cs",
+              "RelativeDocumentMoniker": "RPLIDAR Mapping\\Features\\Map\\MapRenderer.cs",
+              "ToolTip": "E:\\c#\\RPLIDAR\\RPLIDAR Mapping\\Features\\Map\\MapRenderer.cs",
+              "RelativeToolTip": "RPLIDAR Mapping\\Features\\Map\\MapRenderer.cs",
+              "ViewState": "AgIAAFUAAAAAAAAAAAAowGAAAAAGAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-02-16T19:58:01.601Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 10,
+              "Title": "MapStats.cs",
+              "DocumentMoniker": "E:\\c#\\RPLIDAR\\RPLIDAR Mapping\\Features\\Map\\Statistics\\MapStats.cs",
+              "RelativeDocumentMoniker": "RPLIDAR Mapping\\Features\\Map\\Statistics\\MapStats.cs",
+              "ToolTip": "E:\\c#\\RPLIDAR\\RPLIDAR Mapping\\Features\\Map\\Statistics\\MapStats.cs",
+              "RelativeToolTip": "RPLIDAR Mapping\\Features\\Map\\Statistics\\MapStats.cs",
+              "ViewState": "AgIAAA8AAAAAAAAAAAA1wBgAAAAaAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-02-16T19:45:12.385Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 1,
+              "Title": "RPLIDAR.ino",
+              "DocumentMoniker": "E:\\c#\\RPLIDAR\\RPLIDAR\\RPLIDAR.ino",
+              "RelativeDocumentMoniker": "RPLIDAR\\RPLIDAR.ino",
+              "ToolTip": "E:\\c#\\RPLIDAR\\RPLIDAR\\RPLIDAR.ino",
+              "RelativeToolTip": "RPLIDAR\\RPLIDAR.ino",
+              "ViewState": "AgIAAMcBAAAAAAAAAAAAACQAAAAAAAAAAAAAAA==",
+              "Icon": "00000000-0000-0000-0000-000000000000.000000|iVBORw0KGgoAAAANSUhEUgAAACgAAAAoCAYAAACM/rhtAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAApXSURBVFhH1Vh7bF11Hf\u002Bcc899P/u6fdy2d8927MFebCPgEEVNFDdxMIYiBDG\u002BQhzERMEoiRBNNGJc0IT4QOdIiIOqBJTMZcMBMkBYa4FtrqwrbW8f9HHv7X2ft5/faQtdqf\u002BYseK3/eacnvP9/X6f7\u002Bvz\u002B53iAy22bUszt\u002BfJ\u002Bo2b0NNzBnd/717f3rvuCluwg7YNN18taP\u002B/iCRBlyGVHty3L//E44\u002BXLYJ5ratz5u27ct6CV26/CvGlS/Gjn\u002B1z//inD6zf8aUvXzVZqWwumUbSsKzAjNkFEVmW1YBLSVV7vd0rYtFn3ZJ04u4795Ym\u002B/vx4vPPzVjNAbjxiitwz08eQDyZjGVV7ZbeXO7msVJ5Vdk0QoYN2YY9Y3lhROKPS5Jsn0su1/j8vcsj4Sf8ivuXI319ww999zvoevH4jB2lafly3Lt/P5a0JmMEdc8b6cmvpCtalKmVLiys94oAIBFoxK2ULolVd9T6ffdOjoym7v/irUidPQtZGIUjEbQmWtzpcuXWzvHxrw4VirGKYUiaYUJ/n1WsoeqGxMAEuybGd2fVyh0NTU3hYDgsoE1H8NevnYQFaUt/If/zc1O5LaZtnVebF0tkWUIiEOy5tqX1zqyuHb6\u002BbbntEi923fENX0k3bjidyewq6IbPZMsuhhqWjYplhHg7adp4KZvJqK49378fnpZkVVpVbx8oFDdpliUtNPhiqWZailuWtU011YfqNmyeki/71LW4bvnSYLpSTpJO5IppYjGVrAEGqzlTUWskdohMtkaxUPIUDSNYFgVrLa46IA3DR4B\u002By7IgqwRV0XSopgXNpvLhYmuFQDWTmHQTckU3UNZUp92ZfxqwDhZQlVrh\u002B/m6kO1cFY7PHyPmWsj2HRU2xKUaBiPInAuQArk\u002BE0F9noooC8JcRm7a3tiAjzUnsKWuDnG/D6Z4z7TMHyeeiWvM68HG2hpc09yEq5sa0R6LwsONWMy50FpCNVGPxEQuhrT38N\u002BxLRJp\u002B01q8OBAubJ\u002B7s4h7gUhrqmK4bb2FdgcjyPidjt8JSYiueJv/Sn88dw5jFQqM9bTUuVxY0eyFTuXJJEIBeFVXKD/KBoaTqYzeOTMm3h5bAIGhzij5izc4PUOba\u002Bu2sNoH3dt\u002BNwXEHe7azpzud1Z02jgqYKkPa0Kw3ZNUxN\u002BsHUztjbU03NAVcuoqKoThXgggC3xWrRxJ\u002BqdyuHtShmC4pPBIL69YR1ubV\u002BJ\u002BoAfNiNRogMmsxWmg22M4oca65HXKjiTyTm1P7umUL8s55vc3g7VsgYVEWZ2DQxhRHA89ThecH/EhupqfH11O\u002Bp8XnSe68OTr7\u002BOztFRlGhfF/Rj\u002B5Kl\u002BMSqVdhcV\u002BMA\u002BmFnF/JM3TcvXYOrWQpj2SyeOXMGR8/2IlXIw\u002BtSsLY\u002Bjp1r1mBjaxK3t7djsqTiMOc0ZtYVorMORUcLbK61N92MGpdSc7JY2F0wrYYZG0QUBbesWIbLmdZuHoHuO3IER5iSEVlBmu8GWCMnRseQmpxAIhzC6tpablMBrK\u002BqwocbGzEwMYGHXngB\u002B0\u002BdRi\u002BLXgpFMMZ5X8tkcWIwhUa/H6s5N49ZePXtMRQJZlb8Ljlf7/Z0MLKDsijIIkPPIxWDOy3iGvf5sC4WQ6FUwoGuLrzByNhc3MVGkQNBuIJhqOEIjmWn8HB3NwZYV5vZDKIRJnM5HHjlFfx1mNEOR1FdU4uvbdqILWwuEOhbsgsHTv8bo7RbFeNBhRnCHIAik7MRlDX\u002BUaSH7waYwmfVHgUxFvrQ1BRO5ouQQ2Fs4\u002BLfunSdo/dsuBTbmC7d68dzk1kc6u2FxqiKOnv\u002BXC8ODQ2j7A9gDWt377q1uIrXz69Yjo9wDtnjRS\u002B59yydC7pcaOA6gpRnRWBRiUFgk50aZBSna4DKX9FVEuvAYK2JCNssbDC1MdokbRNL6F0rNUL\u002BFDVrcME8B2qGIFcDBY7V/SHYXi9CnCtBG4tNEuV81boKegGb9ahxDp3PbGZH4r2DjCr2ZIe6qE6TlPhyboMIozQnnCiWUMXwJ6NRpKYKOJoawrGeHmcB4YXh9UEJhLCxhqlNNL8Tha2JBP5VKOHYRBonxifQPzSEW9pW4sXUIF6eysNimuvJofWswyxLaIwNJGT21C5w6DMqCz4rM8U8A4o3zkvxM1Yu4xQLXeGO/elkC5r8HuiKGxVOXolEUWZt2UzhWlLG7pYEmlizPcPD6HzrLYcrP9vagq1VUYBjxhUP/sAS6CZo1ecHv0OwI9GEKreCnrFxDOQLhCVNr021RBeLCDJwrubrb4RXlmomdG03ETtdLFKs08Ai561kUyQjYSxhh4poq3RSYRcLfvsoa/CG1gRWsItHMxn8io3xj5FRLKP9MgJfEQo5NVag8xmOdbNe19ZW4yY6fDkbqsAgPMlmeYOEb7nZKNwAxNoMSp7jOlh2g9K2Rx8jzbjaeivqwaJpcieZDrPMCT2ssU9ywhtXtSNAr8VJI6NpDtAQo8TvCCfCw\u002Bk0DpAD/8mFwLSv8rpx2\u002BpL0E4aEZnJscZyHKeQUmIeDwJ0UNT3X06dREf/IEpkBNvj4xeQs7SgmaE6xbOHrXvcVX/dLjGwJqvru0nWDU6DCCtOZnInOUv6GB5720mHnxOLiISoMsOfL1fwal8fDpBmXld1Ugi/I\u002BjIBMGcGhmBrVYQISAuiDDH\u002BsScbKRhRvvxrm48RT4ss4bFGLHe7NpcNu\u002BT5A6esAel9b9/FCFZbhvVtIPcWtY7HTJXCMRmIUe5hy5jUTcEA/DIMrcplY2Tx0BFI534IPuDkAjC5kJi07X5XqEDzYrkbH0RghBNNM65\u002BN2DCXEapUMyU2vTgbnCE/VQ1KUwgjgurf3dIwgQ4KSmH1RtAXAB4cSg5za5SyJQ0UzcGxxAEiMkGgGM6nlCG8c5jgHBinvnMUlaEgcOqi3GCYfmCTM6xCzt4QzHWWoWDNEQEDzERwupCD8nkxlBsWXxOxWyUHaxWIzHm/eOoUgEI/O4JQdDkGgvsfNdvJdZpyAPOjJ/nKM8FwhMxOYANPkHq5lkybj8F3UGChFgmR5xmHC85\u002BOF7IU6kRfD5o8RwvkWGiOUpMzXVN6z1g3Ow/O1aalOGj4IapqabRokDZ6ocy\u002B9RArQS7DNlLOdEP2iq22NWKaVsZhVeXT/w3BZVp4R7JJMs0TFIqvIZrdumNnxjoPT/5thmsuGbjzPDbvP2WcXUQlwmHV4lFHM5Y49A4cbSqdPI7z18gnuhtW2bV3GCvVMd9NFV40t9Gc2yG/ZXMXs4UPTACWSqG/1al1SPG\u002BycxpZBytty3ZT6cjFUa6p8Yj3DNe/X89k\u002B0d/sQ9WsTgNUNzoPEq5m1vy5LpX6QofWnFqmOpy6OL9Ux4IrRSj9yd\u002BLd5njI\u002BfTnc8Bn1oUECb3nZnxbN0Gdy1dYju2Mnd276Sjz7O6yZem6lk1wsq3GIwQl7s5vUor8/mn35qQuX3idZ3zjEQch7AWXE3JaDE43J052e4TbuqyJPVpNoLDtCy9DTTm8k//XTOGBsz9eGhmVf/NwL8B332CGj5gTicAAAAAElFTkSuQmCC",
+              "WhenOpened": "2025-02-12T20:06:08.139Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 6,
+              "Title": "Program.cs",
+              "DocumentMoniker": "E:\\c#\\RPLIDAR\\RPLIDAR Mapping\\Core\\Program.cs",
+              "RelativeDocumentMoniker": "RPLIDAR Mapping\\Core\\Program.cs",
+              "ToolTip": "E:\\c#\\RPLIDAR\\RPLIDAR Mapping\\Core\\Program.cs",
+              "RelativeToolTip": "RPLIDAR Mapping\\Core\\Program.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-02-25T18:42:07.57Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 4,
+              "Title": "SerialCom.cs",
+              "DocumentMoniker": "E:\\c#\\RPLIDAR\\RPLIDAR Mapping\\Features\\Communications\\SerialCom.cs",
+              "RelativeDocumentMoniker": "RPLIDAR Mapping\\Features\\Communications\\SerialCom.cs",
+              "ToolTip": "E:\\c#\\RPLIDAR\\RPLIDAR Mapping\\Features\\Communications\\SerialCom.cs",
+              "RelativeToolTip": "RPLIDAR Mapping\\Features\\Communications\\SerialCom.cs",
+              "ViewState": "AgIAADMAAAAAAAAAAAAYwMAAAAAHAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-02-15T20:59:48.025Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "AppSettings.settings",
+              "DocumentMoniker": "E:\\c#\\RPLIDAR\\RPLIDAR Mapping\\AppSettings.settings",
+              "RelativeDocumentMoniker": "RPLIDAR Mapping\\AppSettings.settings",
+              "ToolTip": "E:\\c#\\RPLIDAR\\RPLIDAR Mapping\\AppSettings.settings*",
+              "RelativeToolTip": "RPLIDAR Mapping\\AppSettings.settings*",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.002767|",
+              "WhenOpened": "2025-02-12T20:27:01.812Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 3,
+              "Title": "Mapplication.cs",
+              "DocumentMoniker": "E:\\c#\\RPLIDAR\\RPLIDAR Mapping\\Core\\Mapplication.cs",
+              "RelativeDocumentMoniker": "RPLIDAR Mapping\\Core\\Mapplication.cs",
+              "ToolTip": "E:\\c#\\RPLIDAR\\RPLIDAR Mapping\\Core\\Mapplication.cs",
+              "RelativeToolTip": "RPLIDAR Mapping\\Core\\Mapplication.cs",
+              "ViewState": "AgIAAFcAAAAAAAAAAAAYwHEAAAAdAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-02-15T21:38:55.531Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 2,
+              "Title": "Device.cs",
+              "DocumentMoniker": "E:\\c#\\RPLIDAR\\RPLIDAR Mapping\\Features\\Communications\\Device.cs",
+              "RelativeDocumentMoniker": "RPLIDAR Mapping\\Features\\Communications\\Device.cs",
+              "ToolTip": "E:\\c#\\RPLIDAR\\RPLIDAR Mapping\\Features\\Communications\\Device.cs",
+              "RelativeToolTip": "RPLIDAR Mapping\\Features\\Communications\\Device.cs",
+              "ViewState": "AgIAAGUAAAAAAAAAAAAwwHMAAAAQAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-02-12T20:35:44.829Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 13,
+              "Title": "Utility.cs",
+              "DocumentMoniker": "E:\\c#\\RPLIDAR\\RPLIDAR Mapping\\Utilities\\Utility.cs",
+              "RelativeDocumentMoniker": "RPLIDAR Mapping\\Utilities\\Utility.cs",
+              "ToolTip": "E:\\c#\\RPLIDAR\\RPLIDAR Mapping\\Utilities\\Utility.cs",
+              "RelativeToolTip": "RPLIDAR Mapping\\Utilities\\Utility.cs",
+              "ViewState": "AgIAABAAAAAAAAAAAAAswCMAAAAKAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-02-16T20:37:58.019Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 7,
+              "Title": "GridManager.cs",
+              "DocumentMoniker": "E:\\c#\\RPLIDAR\\RPLIDAR Mapping\\Features\\Map\\GridModel\\GridManager.cs",
+              "RelativeDocumentMoniker": "RPLIDAR Mapping\\Features\\Map\\GridModel\\GridManager.cs",
+              "ToolTip": "E:\\c#\\RPLIDAR\\RPLIDAR Mapping\\Features\\Map\\GridModel\\GridManager.cs",
+              "RelativeToolTip": "RPLIDAR Mapping\\Features\\Map\\GridModel\\GridManager.cs",
+              "ViewState": "AgIAACwAAAAAAAAAAAAkwD0AAAALAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-02-16T19:39:34.782Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 14,
+              "Title": "Distributor.cs",
+              "DocumentMoniker": "E:\\c#\\RPLIDAR\\RPLIDAR Mapping\\Features\\Map\\Distributor.cs",
+              "RelativeDocumentMoniker": "RPLIDAR Mapping\\Features\\Map\\Distributor.cs",
+              "ToolTip": "E:\\c#\\RPLIDAR\\RPLIDAR Mapping\\Features\\Map\\Distributor.cs",
+              "RelativeToolTip": "RPLIDAR Mapping\\Features\\Map\\Distributor.cs",
+              "ViewState": "AgIAAAoAAAAAAAAAAAAtwBsAAAApAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-02-16T19:52:46.805Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 8,
+              "Title": "Grid.cs",
+              "DocumentMoniker": "E:\\c#\\RPLIDAR\\RPLIDAR Mapping\\Features\\Map\\GridModel\\Grid.cs",
+              "RelativeDocumentMoniker": "RPLIDAR Mapping\\Features\\Map\\GridModel\\Grid.cs",
+              "ToolTip": "E:\\c#\\RPLIDAR\\RPLIDAR Mapping\\Features\\Map\\GridModel\\Grid.cs",
+              "RelativeToolTip": "RPLIDAR Mapping\\Features\\Map\\GridModel\\Grid.cs",
+              "ViewState": "AgIAAJIAAAAAAAAAAAAmwLwAAAAmAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-02-16T19:32:42.581Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 9,
+              "Title": "Tile.cs",
+              "DocumentMoniker": "E:\\c#\\RPLIDAR\\RPLIDAR Mapping\\Features\\Map\\GridModel\\Tile.cs",
+              "RelativeDocumentMoniker": "RPLIDAR Mapping\\Features\\Map\\GridModel\\Tile.cs",
+              "ToolTip": "E:\\c#\\RPLIDAR\\RPLIDAR Mapping\\Features\\Map\\GridModel\\Tile.cs",
+              "RelativeToolTip": "RPLIDAR Mapping\\Features\\Map\\GridModel\\Tile.cs",
+              "ViewState": "AgIAABAAAAAAAAAAAAA9wFEAAAAYAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-02-23T19:53:17.25Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 5,
+              "Title": ".gitignore",
+              "DocumentMoniker": "E:\\c#\\RPLIDAR\\RPLIDAR Mapping\\.gitignore",
+              "RelativeDocumentMoniker": "RPLIDAR Mapping\\.gitignore",
+              "ToolTip": "E:\\c#\\RPLIDAR\\RPLIDAR Mapping\\.gitignore",
+              "RelativeToolTip": "RPLIDAR Mapping\\.gitignore",
+              "ViewState": "AgIAAFYBAAAAAAAAAAAAAGsBAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
+              "WhenOpened": "2025-02-25T19:00:50.291Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 11,
+              "Title": "Map.cs",
+              "DocumentMoniker": "E:\\c#\\RPLIDAR\\RPLIDAR Mapping\\Features\\Map\\Map.cs",
+              "RelativeDocumentMoniker": "RPLIDAR Mapping\\Features\\Map\\Map.cs",
+              "ToolTip": "E:\\c#\\RPLIDAR\\RPLIDAR Mapping\\Features\\Map\\Map.cs",
+              "RelativeToolTip": "RPLIDAR Mapping\\Features\\Map\\Map.cs",
+              "ViewState": "AgIAACgAAAAAAAAAAAD4v1oAAAAJAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-02-16T19:32:28.586Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 15,
+              "Title": "ICP.cs",
+              "DocumentMoniker": "E:\\c#\\RPLIDAR\\RPLIDAR Mapping\\Features\\Map\\Algorithms\\ICP.cs",
+              "RelativeDocumentMoniker": "RPLIDAR Mapping\\Features\\Map\\Algorithms\\ICP.cs",
+              "ToolTip": "E:\\c#\\RPLIDAR\\RPLIDAR Mapping\\Features\\Map\\Algorithms\\ICP.cs",
+              "RelativeToolTip": "RPLIDAR Mapping\\Features\\Map\\Algorithms\\ICP.cs",
+              "ViewState": "AgIAACQAAAAAAAAAAAAgwBcAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-02-23T18:30:44.933Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 17,
+              "Title": "GridStats.cs",
+              "DocumentMoniker": "E:\\c#\\RPLIDAR\\RPLIDAR Mapping\\Features\\Map\\Statistics\\GridStats.cs",
+              "RelativeDocumentMoniker": "RPLIDAR Mapping\\Features\\Map\\Statistics\\GridStats.cs",
+              "ToolTip": "E:\\c#\\RPLIDAR\\RPLIDAR Mapping\\Features\\Map\\Statistics\\GridStats.cs",
+              "RelativeToolTip": "RPLIDAR Mapping\\Features\\Map\\Statistics\\GridStats.cs",
+              "ViewState": "AgIAAAwAAAAAAAAAAAAuwA8AAAAyAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-02-16T19:31:39.824Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 18,
+              "Title": "GuiManager.cs",
+              "DocumentMoniker": "E:\\c#\\RPLIDAR\\RPLIDAR Mapping\\Features\\Map\\UI\\GuiManager.cs",
+              "RelativeDocumentMoniker": "RPLIDAR Mapping\\Features\\Map\\UI\\GuiManager.cs",
+              "ToolTip": "E:\\c#\\RPLIDAR\\RPLIDAR Mapping\\Features\\Map\\UI\\GuiManager.cs",
+              "RelativeToolTip": "RPLIDAR Mapping\\Features\\Map\\UI\\GuiManager.cs",
+              "ViewState": "AgIAAA4AAAAAAAAAAAAQwB4AAABUAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-02-16T19:42:40.076Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 19,
+              "Title": "ContentManagerProvider.cs",
+              "DocumentMoniker": "E:\\c#\\RPLIDAR\\RPLIDAR Mapping\\Utilities\\ContentManagerProvider.cs",
+              "RelativeDocumentMoniker": "RPLIDAR Mapping\\Utilities\\ContentManagerProvider.cs",
+              "ToolTip": "E:\\c#\\RPLIDAR\\RPLIDAR Mapping\\Utilities\\ContentManagerProvider.cs",
+              "RelativeToolTip": "RPLIDAR Mapping\\Utilities\\ContentManagerProvider.cs",
+              "ViewState": "AgIAAGIAAAAAAAAAAAAgwAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-02-17T20:03:54.485Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 21,
+              "Title": "GraphicsDeviceProvider.cs",
+              "DocumentMoniker": "E:\\c#\\RPLIDAR\\RPLIDAR Mapping\\Utilities\\GraphicsDeviceProvider.cs",
+              "RelativeDocumentMoniker": "RPLIDAR Mapping\\Utilities\\GraphicsDeviceProvider.cs",
+              "ToolTip": "E:\\c#\\RPLIDAR\\RPLIDAR Mapping\\Utilities\\GraphicsDeviceProvider.cs",
+              "RelativeToolTip": "RPLIDAR Mapping\\Utilities\\GraphicsDeviceProvider.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-02-16T20:15:14.588Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 20,
+              "Title": "StatisticsProvider.cs",
+              "DocumentMoniker": "E:\\c#\\RPLIDAR\\RPLIDAR Mapping\\Utilities\\StatisticsProvider.cs",
+              "RelativeDocumentMoniker": "RPLIDAR Mapping\\Utilities\\StatisticsProvider.cs",
+              "ToolTip": "E:\\c#\\RPLIDAR\\RPLIDAR Mapping\\Utilities\\StatisticsProvider.cs",
+              "RelativeToolTip": "RPLIDAR Mapping\\Utilities\\StatisticsProvider.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAABYAAAABAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-02-16T20:15:45.207Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 22,
+              "Title": "InputManager.cs",
+              "DocumentMoniker": "E:\\c#\\RPLIDAR\\RPLIDAR Mapping\\Utilities\\InputManager.cs",
+              "RelativeDocumentMoniker": "RPLIDAR Mapping\\Utilities\\InputManager.cs",
+              "ToolTip": "E:\\c#\\RPLIDAR\\RPLIDAR Mapping\\Utilities\\InputManager.cs",
+              "RelativeToolTip": "RPLIDAR Mapping\\Utilities\\InputManager.cs",
+              "ViewState": "AgIAAD4AAAAAAAAAAAAgwEcAAAAcAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-02-15T22:33:10.653Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 23,
+              "Title": "Wireless.cs",
+              "DocumentMoniker": "E:\\c#\\RPLIDAR\\RPLIDAR Mapping\\Features\\Communications\\Wireless.cs",
+              "RelativeDocumentMoniker": "RPLIDAR Mapping\\Features\\Communications\\Wireless.cs",
+              "ToolTip": "E:\\c#\\RPLIDAR\\RPLIDAR Mapping\\Features\\Communications\\Wireless.cs",
+              "RelativeToolTip": "RPLIDAR Mapping\\Features\\Communications\\Wireless.cs",
+              "ViewState": "AgIAACoBAAAAAAAAAAAowDgBAAASAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-02-12T21:32:03.351Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 24,
+              "Title": "RPLIDAR Mapping.csproj",
+              "DocumentMoniker": "E:\\c#\\RPLIDAR\\RPLIDAR Mapping\\RPLIDAR Mapping.csproj",
+              "RelativeDocumentMoniker": "RPLIDAR Mapping\\RPLIDAR Mapping.csproj",
+              "ToolTip": "E:\\c#\\RPLIDAR\\RPLIDAR Mapping\\RPLIDAR Mapping.csproj",
+              "RelativeToolTip": "RPLIDAR Mapping\\RPLIDAR Mapping.csproj",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAABsAAAAiAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000758|",
+              "WhenOpened": "2025-02-11T16:39:15.962Z"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

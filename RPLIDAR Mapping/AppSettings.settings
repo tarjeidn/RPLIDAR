@@ -9,10 +9,10 @@
       <Value Profile="(Default)">2000</Value>
     </Setting>
     <Setting Name="WiFiPassword" Type="System.String" Scope="User">
-      <Value Profile="(Default)">nyUu4MgAWhTG</Value>
+      <Value Profile="(Default)" />
     </Setting>
     <Setting Name="WiFiSSID" Type="System.String" Scope="User">
-      <Value Profile="(Default)">Telia-2G-B9A841</Value>
+      <Value Profile="(Default)" />
     </Setting>
     <Setting Name="AllowResizing" Type="System.Boolean" Scope="User">
       <Value Profile="(Default)">True</Value>
