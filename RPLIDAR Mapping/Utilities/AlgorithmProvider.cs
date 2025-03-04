@@ -1,0 +1,21 @@
+﻿using Microsoft.Xna.Framework.Content;
+using Microsoft.Xna.Framework.Graphics;
+using RPLIDAR_Mapping.Features.Map.Algorithms;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+
+namespace RPLIDAR_Mapping.Utilities
+{
+  public static class AlgorithmProvider
+  {
+
+    public static TileTrustRegulator TileTrustRegulator { get; set; }
+    public static void Initialize()
+    {
+      TileTrustRegulator = new TileTrustRegulator();
+    }
+  }
+}

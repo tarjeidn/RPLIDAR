@@ -18,6 +18,8 @@ namespace RPLIDAR_Mapping.Features.Map.Statistics
     public float CurrentPacketSize { get; set; }
     public int FrameUpdates {  get; set; }
     public int AddPointUpdates { get; set; }
+    public int LiDARUpdatesPerSecond { get; set; }
+
     public MapStats()
     {
       TotalPointsHandledThisFrame = 0;

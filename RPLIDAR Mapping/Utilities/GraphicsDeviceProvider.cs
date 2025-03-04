@@ -12,9 +12,11 @@ namespace RPLIDAR_Mapping.Utilities
   {
     public static GraphicsDevice GraphicsDevice { get; private set; }
     public static SpriteBatch SpriteBatch { get; private set; }
+    public static FPSCounter FPSCounter { get; private set; }
 
-    public static void Initialize(GraphicsDevice graphicsDevice)
+    public static void Initialize(GraphicsDevice graphicsDevice, FPSCounter fpscounter)
     {
+      FPSCounter = fpscounter;
       if (GraphicsDevice == null)
       {
         GraphicsDevice = graphicsDevice;

@@ -116,6 +116,7 @@ namespace RPLIDAR_Mapping.Utilities
 
       
     }
+    public static int Modulo(int value, int mod) => ((value % mod) + mod) % mod;
 
 
 
@@ -130,11 +131,14 @@ namespace RPLIDAR_Mapping.Utilities
     private double _elapsedTime;
     private int _fps;
 
-    private int _pointsHandledPerSecond; //  Track points per second
-    private int _pointsAccumulated; //  Store points in the current second
+    private int _pointsHandledPerSecond; // Track points per second
+    private int _pointsAccumulated; // Store points in the current second
 
-    public int FPS => _fps; //  Get the latest FPS value
+    private int _lidarUpdateCount; //  Track LiDAR updates per second
+
+    public int FPS => _fps;
     public int PointsPerSecond => _pointsHandledPerSecond;
+    public int LiDARUpdatesPerSecond => _lidarUpdateCount;
 
     public void Update(GameTime gameTime)
     {
@@ -142,16 +146,24 @@ namespace RPLIDAR_Mapping.Utilities
       _frameCount++;
       _pointsAccumulated += StatisticsProvider.MapStats.TotalPointsHandledThisFrame;
 
-      if (_elapsedTime >= 1.0) //  Update FPS every second
+      if (_elapsedTime >= 1.0) //  Update stats every second
       {
         _fps = _frameCount;
         StatisticsProvider.MapStats.FPS = _fps;
         StatisticsProvider.MapStats.PointsPerSecond = _pointsAccumulated;
+        StatisticsProvider.MapStats.LiDARUpdatesPerSecond = _lidarUpdateCount; //  Store LiDAR updates count
+
+        //  Reset counters
         _frameCount = 0;
         _elapsedTime = 0;
         _pointsAccumulated = 0;
+        _lidarUpdateCount = 0; //  Reset LiDAR update counter
       }
+    }
+    public void IncrementLiDARUpdate()
+    {
+      _lidarUpdateCount++;
     }
   }
 
-}
+ }

@@ -11,21 +11,22 @@ namespace RPLIDAR_Mapping.Features.Map
   public class Distributor
   {
     public GridManager _GridManager { get; set; }
-    public Distributor() 
+    public Map _map { get; set; }
+    public Distributor(Map map) 
     { 
-      _GridManager = new GridManager();
+      _GridManager = new GridManager(map);
     }
     public void Update()
     {
       _GridManager.Update();
     }
-    public void Distribute(MapPoint point)
+    public void Distribute(List<MapPoint> points)
     {
-      DistributeToGrid(point);
+      DistributeToGrid(points);
     }
-    private void DistributeToGrid(MapPoint point) 
+    private void DistributeToGrid(List<MapPoint> points) 
     {
-      _GridManager.MapPointToGrid(point);
+      _GridManager.MapPointToGrid(points);
     }
 
   }

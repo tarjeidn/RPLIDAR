@@ -9,10 +9,10 @@
       <Value Profile="(Default)">2000</Value>
     </Setting>
     <Setting Name="WiFiPassword" Type="System.String" Scope="User">
-      <Value Profile="(Default)" />
+      <Value Profile="(Default)">f</Value>
     </Setting>
     <Setting Name="WiFiSSID" Type="System.String" Scope="User">
-      <Value Profile="(Default)" />
+      <Value Profile="(Default)">f</Value>
     </Setting>
     <Setting Name="AllowResizing" Type="System.Boolean" Scope="User">
       <Value Profile="(Default)">True</Value>
@@ -26,14 +26,14 @@
     <Setting Name="SerialPort" Type="System.String" Scope="User">
       <Value Profile="(Default)">COM4</Value>
     </Setting>
-    <Setting Name="MapScale" Type="System.Single" Scope="User">
-      <Value Profile="(Default)">0.5</Value>
+    <Setting Name="MapZoom" Type="System.Single" Scope="User">
+      <Value Profile="(Default)">1</Value>
     </Setting>
     <Setting Name="GridTileSizeCM" Type="System.Int32" Scope="Application">
       <Value Profile="(Default)">2</Value>
     </Setting>
     <Setting Name="GridSizeM" Type="System.Single" Scope="Application">
-      <Value Profile="(Default)">4</Value>
+      <Value Profile="(Default)">1</Value>
     </Setting>
     <Setting Name="MaxPoints" Type="System.Int32" Scope="User">
       <Value Profile="(Default)">10000</Value>
@@ -60,13 +60,49 @@
       <Value Profile="(Default)">45</Value>
     </Setting>
     <Setting Name="TileDecayRate" Type="System.Int32" Scope="User">
-      <Value Profile="(Default)">500</Value>
+      <Value Profile="(Default)">10</Value>
     </Setting>
     <Setting Name="ICPUpdateRate" Type="System.Int32" Scope="User">
       <Value Profile="(Default)">60</Value>
     </Setting>
     <Setting Name="MaxHighintensityFactor" Type="System.Single" Scope="User">
       <Value Profile="(Default)">1.5</Value>
+    </Setting>
+    <Setting Name="MapUpdateBatchSize" Type="System.Int32" Scope="User">
+      <Value Profile="(Default)">100</Value>
+    </Setting>
+    <Setting Name="TileTrustIncrement" Type="System.Single" Scope="User">
+      <Value Profile="(Default)">20</Value>
+    </Setting>
+    <Setting Name="TileTrustDecrement" Type="System.Single" Scope="User">
+      <Value Profile="(Default)">2</Value>
+    </Setting>
+    <Setting Name="TileTrustThreshold" Type="System.Int32" Scope="User">
+      <Value Profile="(Default)">30</Value>
+    </Setting>
+    <Setting Name="MapWindowWidth" Type="System.Int32" Scope="User">
+      <Value Profile="(Default)">3000</Value>
+    </Setting>
+    <Setting Name="MapWindowHeight" Type="System.Int32" Scope="User">
+      <Value Profile="(Default)">3000</Value>
+    </Setting>
+    <Setting Name="TilemergeThreshold" Type="System.Single" Scope="User">
+      <Value Profile="(Default)">10</Value>
+    </Setting>
+    <Setting Name="MergeTilesFrequency" Type="System.Int32" Scope="User">
+      <Value Profile="(Default)">10</Value>
+    </Setting>
+    <Setting Name="DrawMergedTiles" Type="System.Boolean" Scope="User">
+      <Value Profile="(Default)">True</Value>
+    </Setting>
+    <Setting Name="MinMergedTileSize" Type="System.Int32" Scope="User">
+      <Value Profile="(Default)">10</Value>
+    </Setting>
+    <Setting Name="GridScaleFactor" Type="System.Single" Scope="User">
+      <Value Profile="(Default)">1</Value>
+    </Setting>
+    <Setting Name="DrawTileSize" Type="System.Int32" Scope="User">
+      <Value Profile="(Default)">5</Value>
     </Setting>
   </Settings>
 </SettingsFile>

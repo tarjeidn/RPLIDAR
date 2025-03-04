@@ -49,7 +49,7 @@ namespace RPLIDAR_Mapping {
         
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("")]
+        [global::System.Configuration.DefaultSettingValueAttribute("f")]
         public string WiFiPassword {
             get {
                 return ((string)(this["WiFiPassword"]));
@@ -61,7 +61,7 @@ namespace RPLIDAR_Mapping {
         
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("")]
+        [global::System.Configuration.DefaultSettingValueAttribute("f")]
         public string WiFiSSID {
             get {
                 return ((string)(this["WiFiSSID"]));
@@ -121,13 +121,13 @@ namespace RPLIDAR_Mapping {
         
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("0.5")]
-        public float MapScale {
+        [global::System.Configuration.DefaultSettingValueAttribute("1")]
+        public float MapZoom {
             get {
-                return ((float)(this["MapScale"]));
+                return ((float)(this["MapZoom"]));
             }
             set {
-                this["MapScale"] = value;
+                this["MapZoom"] = value;
             }
         }
         
@@ -142,7 +142,7 @@ namespace RPLIDAR_Mapping {
         
         [global::System.Configuration.ApplicationScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("4")]
+        [global::System.Configuration.DefaultSettingValueAttribute("1")]
         public float GridSizeM {
             get {
                 return ((float)(this["GridSizeM"]));
@@ -247,7 +247,7 @@ namespace RPLIDAR_Mapping {
         
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("500")]
+        [global::System.Configuration.DefaultSettingValueAttribute("10")]
         public int TileDecayRate {
             get {
                 return ((int)(this["TileDecayRate"]));
@@ -278,6 +278,150 @@ namespace RPLIDAR_Mapping {
             }
             set {
                 this["MaxHighintensityFactor"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("100")]
+        public int MapUpdateBatchSize {
+            get {
+                return ((int)(this["MapUpdateBatchSize"]));
+            }
+            set {
+                this["MapUpdateBatchSize"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("20")]
+        public float TileTrustIncrement {
+            get {
+                return ((float)(this["TileTrustIncrement"]));
+            }
+            set {
+                this["TileTrustIncrement"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("2")]
+        public float TileTrustDecrement {
+            get {
+                return ((float)(this["TileTrustDecrement"]));
+            }
+            set {
+                this["TileTrustDecrement"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("30")]
+        public int TileTrustThreshold {
+            get {
+                return ((int)(this["TileTrustThreshold"]));
+            }
+            set {
+                this["TileTrustThreshold"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("3000")]
+        public int MapWindowWidth {
+            get {
+                return ((int)(this["MapWindowWidth"]));
+            }
+            set {
+                this["MapWindowWidth"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("3000")]
+        public int MapWindowHeight {
+            get {
+                return ((int)(this["MapWindowHeight"]));
+            }
+            set {
+                this["MapWindowHeight"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("10")]
+        public float TilemergeThreshold {
+            get {
+                return ((float)(this["TilemergeThreshold"]));
+            }
+            set {
+                this["TilemergeThreshold"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("10")]
+        public int MergeTilesFrequency {
+            get {
+                return ((int)(this["MergeTilesFrequency"]));
+            }
+            set {
+                this["MergeTilesFrequency"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("True")]
+        public bool DrawMergedTiles {
+            get {
+                return ((bool)(this["DrawMergedTiles"]));
+            }
+            set {
+                this["DrawMergedTiles"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("10")]
+        public int MinMergedTileSize {
+            get {
+                return ((int)(this["MinMergedTileSize"]));
+            }
+            set {
+                this["MinMergedTileSize"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("1")]
+        public float GridScaleFactor {
+            get {
+                return ((float)(this["GridScaleFactor"]));
+            }
+            set {
+                this["GridScaleFactor"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("5")]
+        public int DrawTileSize {
+            get {
+                return ((int)(this["DrawTileSize"]));
+            }
+            set {
+                this["DrawTileSize"] = value;
             }
         }
     }

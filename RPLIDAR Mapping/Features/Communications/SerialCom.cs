@@ -317,7 +317,7 @@ namespace RPLIDAR_Mapping.Features.Communications
                 Debug.WriteLine($"Unexpected payload size: {payloadSize} bytes. Not a multiple of 5");
               }
 
-              // 🔄 Reset buffer for the next packet
+              //  Reset buffer for the next packet
               _serialBuffer.Clear();
               _isReceivingPacket = false;
             }

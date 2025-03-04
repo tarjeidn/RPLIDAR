@@ -7,6 +7,7 @@ using MQTTnet;
 using RPLIDAR_Mapping.Features;
 using RPLIDAR_Mapping.Features.Communications;
 using RPLIDAR_Mapping.Features.Map;
+using RPLIDAR_Mapping.Features.Map.UI;
 using RPLIDAR_Mapping.Interfaces;
 using RPLIDAR_Mapping.Models;
 using RPLIDAR_Mapping.Utilities;
@@ -15,6 +16,7 @@ using RPLIDAR_Mapping.Utilities;
 
 using System;
 using System.Diagnostics;
+
 using System.Linq;
 using System.Threading.Tasks;
 
@@ -40,8 +42,11 @@ namespace RPLIDAR_Mapping.Core
     private FPSCounter _fpsCounter;
     private LidarSettings _LidarSettings;
     private GuiManager _guiManager;
-
+    private Camera _camera;
+    private Rectangle _view;
     private float _mapScale = 1.0f;
+    private Vector2 _mapDrawingPosition = new Vector2(100, 100);
+
 
 
 
@@ -56,21 +61,27 @@ namespace RPLIDAR_Mapping.Core
 
       Content.RootDirectory = "Content";
       IsMouseVisible = true;
-      
+
+      IsFixedTimeStep = false; // Let the game run as fast as possible
+      _graphics.SynchronizeWithVerticalRetrace = false; // Disable VSync
+
     }
 
     protected override void Initialize()
     {
+      AlgorithmProvider.Initialize();
+      
+      GraphicsDeviceProvider.Initialize(GraphicsDevice, UtilityProvider.FPSCounter);
+      UtilityProvider.Initialize(GraphicsDeviceProvider.GraphicsDevice);
       ContentManagerProvider.Initialize(Content);
-      GraphicsDeviceProvider.Initialize(GraphicsDevice);
-
+      _camera = UtilityProvider.Camera;
       _guiManager = new GuiManager(this, _map);
-
+      _fpsCounter = UtilityProvider.FPSCounter;
       _GraphicsDevice = GraphicsDeviceProvider.GraphicsDevice;
       // TODO: Add your initialization logic here
       // Initialize the communication via the Device class
       //_device = new Device("serial", "COM4");
-      _fpsCounter = new FPSCounter();
+      
       _connectionParams = new ConnectionParams(
         AppSettings.Default.SerialPort,
         AppSettings.Default.WiFiSSID,
@@ -135,12 +146,20 @@ namespace RPLIDAR_Mapping.Core
         }
         if (GamePad.GetState(PlayerIndex.One).Buttons.Back == ButtonState.Pressed || Keyboard.GetState().IsKeyDown(Keys.Escape))
           Exit();
+        float deltaTime = (float)gameTime.ElapsedGameTime.TotalSeconds; // Get time since last frame
 
         _inputManager.Update(gameTime);
 
+        _camera.SetZoom(AppSettings.Default.MapZoom);
+        //  Get the device's relative position on _mapTexture
+        Vector2 centerOfFullMap = new Vector2(_mapRenderer._mapTexture.Width / 2, _mapRenderer._mapTexture.Height / 2);
+        Rectangle deviceRect = _device.GetDeviceRectRelative(centerOfFullMap);
+        Vector2 deviceRelativePosition = new Vector2(deviceRect.X + deviceRect.Width / 2, deviceRect.Y + deviceRect.Height / 2);
+        _camera.CenterOn(deviceRelativePosition);  //  Center on the correct relative position
+
         // Process LiDAR data
         var lidarDataList = _device.GetData();        
-        _map.Update(lidarDataList);
+        _map.Update(lidarDataList, deltaTime);
 
         base.Update(gameTime);
       }
@@ -150,20 +169,38 @@ namespace RPLIDAR_Mapping.Core
       }
     }
 
-    protected override void Draw(GameTime gameTime)
-    {
-      _GraphicsDevice.Clear(new Color(_guiManager._colorV4));
+protected override void Draw(GameTime gameTime)
+{
+    _GraphicsDevice.Clear(Color.Black);
 
-      // Draw the map
-      _mapRenderer.DrawMap(new Vector2(200, 200));
+      // ✅ Get the corrected source rectangle from Camera
+      //Rectangle sourceRect = _camera.GetSourceRectangle();
+      Rectangle destRect = _camera.GetDestinationRectangle();
+      Rectangle sourceRect = _camera.GetSourceRectangle();
 
+      _mapRenderer.DrawMap();
       _spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp);
-      _spriteBatch.Draw(_mapRenderer._mapTexture, new Vector2(200, 200), Color.White);
-      _spriteBatch.DrawString(ContentManagerProvider.GetFont("DebugFont"), $"FPS: {_fpsCounter.FPS}", new Vector2(10, 10), Color.White);
-      _spriteBatch.End();
-      base.Draw(gameTime);
-      _guiManager.Draw(gameTime);
-    }
+
+    _spriteBatch.Draw(
+        _mapRenderer._mapTexture,
+        destRect,
+        sourceRect,
+        Color.White
+    );
+
+    _spriteBatch.DrawString(
+        ContentManagerProvider.GetFont("DebugFont"),
+        $"FPS: {_fpsCounter.FPS}\nLiDAR Updates/s: {StatisticsProvider.MapStats.LiDARUpdatesPerSecond}",
+        new Vector2(10, 10),
+        Color.White
+    );
+
+    _spriteBatch.End();
+    
+
+    base.Draw(gameTime);
+    _guiManager.Draw(gameTime);
+}
 
 
 
