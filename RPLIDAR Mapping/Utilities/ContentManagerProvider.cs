@@ -172,17 +172,22 @@ namespace RPLIDAR_Mapping.Utilities
       Camera camera = UtilityProvider.Camera;
       Rectangle viewportBounds = camera.GetViewportBounds(rect.Width); // Get current viewport bounds
 
-      // ✅ If no part of the grid is visible, skip drawing
-      if (!viewportBounds.Intersects(rect)) return;
-
+      //  Ensure the rectangle's coordinates are correctly adjusted for scaling
       int x = rect.X;
       int y = rect.Y;
       int width = rect.Width;
       int height = rect.Height;
 
-      // ✅ Adjust clipping to make sure partially visible borders are drawn correctly
+      //  Fix for negative coordinates: Translate to screen space
+      Vector2 screenPos = camera.WorldToScreen(new Vector2(x, y));
+      x = (int)screenPos.X;
+      y = (int)screenPos.Y;
 
-      // Top border (even if rect.Y is above the viewport, adjust it down)
+      //  Ensure the rectangle is still within the viewport after transformation
+      Rectangle transformedRect = new Rectangle(x, y, width, height);
+      if (!viewportBounds.Intersects(transformedRect)) return;
+
+      //  Adjust clipping to make sure partially visible borders are drawn correctly
       int topY = Math.Max(y, viewportBounds.Y);
       int topStartX = Math.Max(x, viewportBounds.X);
       int topEndX = Math.Min(x + width, viewportBounds.X + viewportBounds.Width);
@@ -190,13 +195,13 @@ namespace RPLIDAR_Mapping.Utilities
         spriteBatch.Draw(WhiteTexture, new Rectangle(topStartX, topY, topEndX - topStartX, thickness), borderColor);
 
       // Bottom border
-      int bottomY = y + height - thickness; // Always stays at rect's bottom
+      int bottomY = y + height - thickness;
       int bottomStartX = Math.Max(x, viewportBounds.X);
       int bottomEndX = Math.Min(x + width, viewportBounds.X + viewportBounds.Width);
       if (bottomEndX > bottomStartX)
         spriteBatch.Draw(WhiteTexture, new Rectangle(bottomStartX, bottomY, bottomEndX - bottomStartX, thickness), borderColor);
 
-      // Left border (even if rect.X is left of the viewport, adjust it right)
+      // Left border
       int leftX = Math.Max(x, viewportBounds.X);
       int leftStartY = Math.Max(y, viewportBounds.Y);
       int leftEndY = Math.Min(y + height, viewportBounds.Y + viewportBounds.Height);
@@ -204,31 +209,58 @@ namespace RPLIDAR_Mapping.Utilities
         spriteBatch.Draw(WhiteTexture, new Rectangle(leftX, leftStartY, thickness, leftEndY - leftStartY), borderColor);
 
       // Right border
-      int rightX = x + width - thickness; // Always stays at rect's right
+      int rightX = x + width - thickness;
       int rightStartY = Math.Max(y, viewportBounds.Y);
       int rightEndY = Math.Min(y + height, viewportBounds.Y + viewportBounds.Height);
       if (rightEndY > rightStartY)
         spriteBatch.Draw(WhiteTexture, new Rectangle(rightX, rightStartY, thickness, rightEndY - rightStartY), borderColor);
     }
 
-
-
     //public static void DrawRectangleBorder(SpriteBatch spriteBatch, Rectangle rect, int thickness, Color borderColor)
     //{
+    //  Camera camera = UtilityProvider.Camera;
+    //  Rectangle viewportBounds = camera.GetViewportBounds(rect.Width); // Get current viewport bounds
+
+    //  //  If no part of the grid is visible, skip drawing
+    //  if (!viewportBounds.Intersects(rect)) return;
+
     //  int x = rect.X;
     //  int y = rect.Y;
     //  int width = rect.Width;
     //  int height = rect.Height;
 
-    //  // Top border
-    //  spriteBatch.Draw(WhiteTexture, new Rectangle(x, y, width, thickness), borderColor);
+    //  //  Adjust clipping to make sure partially visible borders are drawn correctly
+
+    //  // Top border (even if rect.Y is above the viewport, adjust it down)
+    //  int topY = Math.Max(y, viewportBounds.Y);
+    //  int topStartX = Math.Max(x, viewportBounds.X);
+    //  int topEndX = Math.Min(x + width, viewportBounds.X + viewportBounds.Width);
+    //  if (topEndX > topStartX)
+    //    spriteBatch.Draw(WhiteTexture, new Rectangle(topStartX, topY, topEndX - topStartX, thickness), borderColor);
+
     //  // Bottom border
-    //  spriteBatch.Draw(WhiteTexture, new Rectangle(x, y + height - thickness, width, thickness), borderColor);
-    //  // Left border
-    //  spriteBatch.Draw(WhiteTexture, new Rectangle(x, y, thickness, height), borderColor);
+    //  int bottomY = y + height - thickness; // Always stays at rect's bottom
+    //  int bottomStartX = Math.Max(x, viewportBounds.X);
+    //  int bottomEndX = Math.Min(x + width, viewportBounds.X + viewportBounds.Width);
+    //  if (bottomEndX > bottomStartX)
+    //    spriteBatch.Draw(WhiteTexture, new Rectangle(bottomStartX, bottomY, bottomEndX - bottomStartX, thickness), borderColor);
+
+    //  // Left border (even if rect.X is left of the viewport, adjust it right)
+    //  int leftX = Math.Max(x, viewportBounds.X);
+    //  int leftStartY = Math.Max(y, viewportBounds.Y);
+    //  int leftEndY = Math.Min(y + height, viewportBounds.Y + viewportBounds.Height);
+    //  if (leftEndY > leftStartY)
+    //    spriteBatch.Draw(WhiteTexture, new Rectangle(leftX, leftStartY, thickness, leftEndY - leftStartY), borderColor);
+
     //  // Right border
-    //  spriteBatch.Draw(WhiteTexture, new Rectangle(x + width - thickness, y, thickness, height), borderColor);
+    //  int rightX = x + width - thickness; // Always stays at rect's right
+    //  int rightStartY = Math.Max(y, viewportBounds.Y);
+    //  int rightEndY = Math.Min(y + height, viewportBounds.Y + viewportBounds.Height);
+    //  if (rightEndY > rightStartY)
+    //    spriteBatch.Draw(WhiteTexture, new Rectangle(rightX, rightStartY, thickness, rightEndY - rightStartY), borderColor);
     //}
+
+
 
     struct LineVertex
     {

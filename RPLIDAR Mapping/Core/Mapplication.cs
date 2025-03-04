@@ -173,7 +173,7 @@ protected override void Draw(GameTime gameTime)
 {
     _GraphicsDevice.Clear(Color.Black);
 
-      // ✅ Get the corrected source rectangle from Camera
+      //  Get the corrected source rectangle from Camera
       //Rectangle sourceRect = _camera.GetSourceRectangle();
       Rectangle destRect = _camera.GetDestinationRectangle();
       Rectangle sourceRect = _camera.GetSourceRectangle();

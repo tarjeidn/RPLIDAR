@@ -124,15 +124,15 @@ namespace RPLIDAR_Mapping.Features.Map
           float distance = dp.Distance;
 
 
-          // 🔥 Adjust relative positions based on scaling
+          // Relative positions, from the viewpoint of the device. 
           float relativeX = distance * (float)Math.Cos(radians);
           float relativeY = distance * (float)Math.Sin(radians);
 
-          // ✅ Convert global coordinates, now using the scaled distance
+          // Global coordinates 
           float globalX = (_device._devicePosition.X) + relativeX;
           float globalY = (_device._devicePosition.Y) + relativeY;
 
-          // ✅ Store only scaled values in MapPoint
+          //  Store only scaled values in MapPoint
           MapPoint mapPoint = new MapPoint(relativeX, relativeY, dp.Angle, distance, radians, dp.Quality, globalX, globalY);
           addedPoints.Add(mapPoint);
         }
@@ -140,68 +140,7 @@ namespace RPLIDAR_Mapping.Features.Map
 
       _Distributor.Distribute(addedPoints);
     }
-    //public void AddPoints(List<DataPoint> dplist)
-    //{
-    //  List<MapPoint> addedPoints = new List<MapPoint>(dplist.Count);
 
-    //  foreach (DataPoint dp in dplist)
-    //  {
-    //    if (dp.Quality > AppSettings.Default.MinPointQuality && dp.Distance >= 1.0f)
-    //    {
-    //      float radians = MathHelper.ToRadians(dp.Angle);
-    //      float distanceCM = dp.Distance * 0.1f;
-
-    //      // 🔥 Apply GridScaleFactor to distance scaling
-    //      float scaledDistance = distanceCM * (1.0f / GridScaleFactor);
-
-    //      // 🔥 Adjust relative positions based on scaling
-    //      float relativeX = scaledDistance * (float)Math.Cos(radians);
-    //      float relativeY = scaledDistance * (float)Math.Sin(radians);
-
-    //      // ✅ Convert global coordinates, now using the scaled distance
-    //      float globalX = (_device._devicePosition.X * 0.1f) + relativeX;
-    //      float globalY = (_device._devicePosition.Y * 0.1f) + relativeY;
-
-    //      // ✅ Store only scaled values in MapPoint
-    //      MapPoint mapPoint = new MapPoint(relativeX, relativeY, dp.Angle, scaledDistance, radians, dp.Quality, globalX, globalY);
-    //      addedPoints.Add(mapPoint);
-    //    }
-    //  }
-
-    //  _Distributor.Distribute(addedPoints);
-    //}
-    //public void AddPoints(List<DataPoint> dplist)
-    //{
-    //  List<MapPoint> addedPoints = new List<MapPoint>(dplist.Count);
-
-    //  foreach (DataPoint dp in dplist)
-    //  {
-    //    if (dp.Quality > AppSettings.Default.MinPointQuality && dp.Distance >= 1.0f)
-    //    {
-    //      float radians = MathHelper.ToRadians(dp.Angle);
-
-    //      // ✅ Convert LiDAR distances from mm → cm
-    //      float distanceCM = dp.Distance * 0.1f;
-
-    //      // 🔥 Apply scaling factor (Zoom effect)
-    //      float scaledDistance = distanceCM * (1.0f / GridScaleFactor);
-
-    //      // ✅ Compute relative positions with the scale applied
-    //      float relativeX = scaledDistance * (float)Math.Cos(radians);
-    //      float relativeY = scaledDistance * (float)Math.Sin(radians);
-
-    //      // ✅ Convert global coordinates, now using the scaled distance
-    //      float globalX = (_device._devicePosition.X * 0.1f) + relativeX;
-    //      float globalY = (_device._devicePosition.Y * 0.1f) + relativeY;
-
-    //      // ✅ Store only scaled values in MapPoint
-    //      MapPoint mapPoint = new MapPoint(relativeX, relativeY, dp.Angle, scaledDistance, radians, dp.Quality, globalX, globalY);
-    //      addedPoints.Add(mapPoint);
-    //    }
-    //  }
-
-    //  _Distributor.Distribute(addedPoints);
-    //}
 
 
     private void MergeTilesGlobal(float mergeThreshold)
@@ -211,9 +150,9 @@ namespace RPLIDAR_Mapping.Features.Map
       List<Tile> drawnTiles = _Distributor._GridManager.GetAllDrawnTiles();
       if (drawnTiles.Count == 0) return;
 
-      int tileSize = (int)(drawnTiles[0]._tileSize); // ✅ Correct tile size
+      int tileSize = (int)(drawnTiles[0]._tileSize); //  Correct tile size
 
-      // ✅ Spatial lookup for fast merging
+      //  Spatial lookup for fast merging
       Dictionary<(int, int), Tile> tileMap = new();
       foreach (Tile tile in drawnTiles)
       {
@@ -226,7 +165,7 @@ namespace RPLIDAR_Mapping.Features.Map
       {
         if (visited.Contains(tile)) continue;
 
-        // ✅ Start a new merged region
+        //  Start a new merged region
         List<Tile> mergedTiles = new() { tile };
         float minX = tile.GlobalCenter.X;
         float minY = tile.GlobalCenter.Y;
@@ -267,7 +206,7 @@ namespace RPLIDAR_Mapping.Features.Map
                   queue.Enqueue(neighbor);
                   mergedTiles.Add(neighbor);
 
-                  // ✅ Update min/max boundaries
+                  //  Update min/max boundaries
                   minX = Math.Min(minX, neighbor.GlobalCenter.X);
                   minY = Math.Min(minY, neighbor.GlobalCenter.Y);
                   maxX = Math.Max(maxX, neighbor.GlobalCenter.X);
@@ -284,13 +223,13 @@ namespace RPLIDAR_Mapping.Features.Map
           }
         }
 
-        // ✅ Compute dominant angle
+        //  Compute dominant angle
         float angle = ComputeDominantLidarAngle(lidarAngles);
 
-        // ✅ Determine permanence
+        //  Determine permanence
         bool isPermanentRegion = (float)permanentTileCount / mergedTiles.Count >= 0.2f;
 
-        // ✅ Corrected Rectangle Creation
+        //  Corrected Rectangle Creation
         int rectX = (int)(minX - tileSize / 2); // Move to top-left origin
         int rectY = (int)(minY - tileSize / 2);
         int rectWidth = (int)(maxX - minX + tileSize);

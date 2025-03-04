@@ -57,28 +57,16 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
       }
 
     }
-    //public void UpdateGridScale(float newScaleFactor)
-    //{
-    //  GridScaleFactor = newScaleFactor;
 
-    //  // 🔥 Inform each grid about the new scale
-    //  foreach (var grid in Grids.Values)
-    //  {
-    //    grid.UpdateGridScale(GridScaleFactor);
-    //  }
-    //}
 
 
     public void Update()
     {
-
       GridStats.Update();
       foreach (Grid grid in Grids.Values)
       {
         grid.Update();
-
       }
-
     }
 
     private Grid GetOrCreateGrid(int gridX, int gridY)
@@ -91,77 +79,24 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
 
       return Grids[key];
     }
-    //public void MapPointToGrid(List<MapPoint> points)
-    //{
-    //  foreach (MapPoint point in points)
-    //  {
-    //    // ✅ Ensure we're using the correct grid size after scaling
-    //    float gridSizeScaled = _gridSizePixels / GridScaleFactor;
-    //    int gridSizeInt = (int)gridSizeScaled; // Convert to int for indexing
 
-    //    // ✅ Compute correct grid position using consistent scaling
-    //    int gridX = (int)Math.Floor(point.GlobalX / gridSizeScaled);
-    //    int gridY = (int)Math.Floor(point.GlobalY / gridSizeScaled);
-
-    //    // ✅ Ensure local tile position is correctly mapped (Fix for negative grids)
-    //    int localX = Utility.Modulo((int)(point.GlobalX - gridX * gridSizeScaled), gridSizeInt) / tileSize;
-    //    int localY = Utility.Modulo((int)(point.GlobalY - gridY * gridSizeScaled), gridSizeInt) / tileSize;
-
-    //    // ✅ Prevent out-of-bounds errors
-    //    if (localX < 0 || localX >= gridSizeInt / tileSize || localY < 0 || localY >= gridSizeInt / tileSize)
-    //    {
-    //      Debug.WriteLine($"⚠ WARNING: Tile ({localX}, {localY}) out of bounds! (Grid {gridX}, {gridY})");
-    //      continue;
-    //    }
-
-    //    // ✅ Fetch or create the grid and add the point
-    //    GetOrCreateGrid(gridX, gridY).AddPoint(localX, localY, point);
-    //  }
-    //}
-
-    //public void MapPointToGrid(List<MapPoint> points)
-    //{
-    //  foreach (MapPoint point in points)
-    //  {
-    //    // ✅ Use unscaled grid size for correct grid placement
-    //    float gridSize = _gridSizePixels;
-
-    //    // 🔥 Adjust for scaling when determining grid indices
-    //    int gridX = (int)Math.Floor((point.GlobalX * GridScaleFactor) / gridSize);
-    //    int gridY = (int)Math.Floor((point.GlobalY * GridScaleFactor) / gridSize);
-
-    //    // ✅ Compute local tile position correctly within the grid
-    //    int localX = Utility.Modulo((int)((point.GlobalX * GridScaleFactor) - gridX * gridSize), (int)gridSize) / tileSize;
-    //    int localY = Utility.Modulo((int)((point.GlobalY * GridScaleFactor) - gridY * gridSize), (int)gridSize) / tileSize;
-
-    //    // ✅ Prevent out-of-bounds errors
-    //    if (localX < 0 || localX >= (int)gridSize / tileSize || localY < 0 || localY >= (int)gridSize / tileSize)
-    //    {
-    //      Debug.WriteLine($"⚠ WARNING: Tile ({localX}, {localY}) out of bounds! (Grid {gridX}, {gridY})");
-    //      continue;
-    //    }
-
-    //    // ✅ Fetch or create the grid and add the point
-    //    GetOrCreateGrid(gridX, gridY).AddPoint(localX, localY, point);
-    //  }
-    //}
     public void MapPointToGrid(List<MapPoint> points)
     {
       foreach (MapPoint point in points)
       {
-        // ✅ Use dynamically scaled grid size
+        //  Use dynamically scaled grid size
         float scaledGridSize = MapScaleManager.Instance.ScaledGridSizePixels;
         float scaledTileSize = MapScaleManager.Instance.ScaledTileSizePixels;
 
-        // ✅ Compute correct grid index based on global position
+        //  Compute correct grid index based on global position
         int gridX = (int)Math.Floor(point.GlobalX / scaledGridSize);
         int gridY = (int)Math.Floor(point.GlobalY / scaledGridSize);
 
-        // ✅ Compute correct local tile position within the grid
+        //  Compute correct local tile position within the grid
         int localX = Utility.Modulo((int)(point.GlobalX - gridX * scaledGridSize), (int)scaledGridSize) / (int)scaledTileSize;
         int localY = Utility.Modulo((int)(point.GlobalY - gridY * scaledGridSize), (int)scaledGridSize) / (int)scaledTileSize;
 
-        // ✅ Prevent out-of-bounds errors
+        //  Prevent out-of-bounds errors
         if (localX < 0 || localX >= (int)scaledGridSize / (int)scaledTileSize ||
             localY < 0 || localY >= (int)scaledGridSize / (int)scaledTileSize)
         {
@@ -169,7 +104,7 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
           continue;
         }
 
-        // ✅ Fetch or create the grid and add the point
+        //  Fetch or create the grid and add the point
         GetOrCreateGrid(gridX, gridY).AddPoint(localX, localY, point);
       }
     }

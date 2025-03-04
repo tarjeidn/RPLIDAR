@@ -72,47 +72,65 @@ namespace RPLIDAR_Mapping.Features.Map
     public void DrawGrids(Vector2 devicePosition)
     {
       Camera camera = UtilityProvider.Camera;
-      Rectangle viewportBounds = camera.GetViewportBounds(_gridSize);
+      float scaleFactor = MapScaleManager.Instance.ScaleFactor;
+      int scaledGridSize = MapScaleManager.Instance.ScaledGridSizePixels;
+
+      //  Get viewport bounds adjusted for scaling
+      Rectangle viewportBounds = camera.GetViewportBounds(scaledGridSize);
+
+
 
       foreach ((int, int) pos in _GridManager.Grids.Keys)
       {
         Grid grid = _GridManager.Grids[pos];
 
-        // ✅ Compute world position correctly, handling negative grids
-        Vector2 gridWorldPosition = new Vector2(pos.Item1 * _gridSize, pos.Item2 * _gridSize);
+        //  Compute **world position** correctly, applying scale
+        Vector2 gridWorldPosition = new Vector2(
+            pos.Item1 * scaledGridSize,
+            pos.Item2 * scaledGridSize
+        );
 
+        //  Ensure the grid is within the viewport bounds
         Rectangle gridBounds = new Rectangle(
             (int)gridWorldPosition.X,
             (int)gridWorldPosition.Y,
-            _gridSize,
-            _gridSize
+            scaledGridSize,
+            scaledGridSize
         );
 
-        // ✅ FIX: Draw the grid as long as any part of it intersects the viewport
         if (!viewportBounds.Intersects(gridBounds))
         {
-          continue; // Skip only if completely outside
+
+          continue;
         }
 
-        // ✅ Calculate grid offset for proper screen positioning
+        //  Compute **offset correctly**, applying scale factor
         Vector2 gridOffset = new Vector2(
-            _centerOfFullMap.X + gridWorldPosition.X - devicePosition.X,
-            _centerOfFullMap.Y + gridWorldPosition.Y - devicePosition.Y
+            (_centerOfFullMap.X + (gridWorldPosition.X - devicePosition.X) * scaleFactor),
+            (_centerOfFullMap.Y + (gridWorldPosition.Y - devicePosition.Y) * scaleFactor)
         );
 
-        // ✅ Draw the grid tiles
+
+
+        //  Draw grid tiles
         grid.DrawTiles(_SpriteBatch, gridOffset);
 
-        // ✅ Draw the grid border
+        //  Draw the grid border using scaled values
         Rectangle gridScreenRect = new Rectangle(
-            (int)gridOffset.X,
-            (int)gridOffset.Y,
-            _gridSize,
-            _gridSize
+            (int)Math.Round(gridOffset.X),
+            (int)Math.Round(gridOffset.Y),
+            scaledGridSize,
+            scaledGridSize
         );
-        ContentManagerProvider.DrawRectangleBorder(_SpriteBatch, gridScreenRect, 1, Color.White);
+
+        // ContentManagerProvider.DrawRectangleBorder(_SpriteBatch, gridScreenRect, 1, Color.White);
       }
     }
+
+
+
+
+
 
 
 
@@ -133,17 +151,18 @@ namespace RPLIDAR_Mapping.Features.Map
       {
         DrawMergedRectangles(devicePosition, _centerOfFullMap);
       }
-      // ✅ Draw the device at the center of the screen
+      //  Draw the device at the center of the screen
       _SpriteBatch.Draw(
           _device._deviceTexture,
           _device.GetDeviceRectRelative(_centerOfFullMap),
           Color.Red
       );
 
-      // ✅ Draw Map Border
+      //  Draw Map Border
+      DrawingHelperFunctions.DrawGridPattern(_SpriteBatch, _mapTexture, 2);
       ContentManagerProvider.DrawRenderTargetBorder(_SpriteBatch, _mapTexture, 5, Color.White);
 
-      // ✅ Flush all queued lines in a single draw call
+      //  Flush all queued lines in a single draw call
       ContentManagerProvider.DrawQueuedLines(_SpriteBatch);
 
       //_distanceOverlay.Draw();
@@ -154,73 +173,13 @@ namespace RPLIDAR_Mapping.Features.Map
 
 
 
-    //private void DrawGrids()
-    //{
-    //  int gridSize = _GridManager._gridSizePixels;
-    //  Vector2 centerOfFullMap = new Vector2(_mapTexture.Width / 2, _mapTexture.Height / 2);
-    //  Vector2 devicePosition = _device._devicePosition; // The current device position in world space
-
-    //  _GraphicsDevice.SetRenderTarget(_mapTexture);
-    //  _GraphicsDevice.Clear(Color.Transparent);
-
-    //  _SpriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp);
-
-    //  foreach ((int, int) pos in _GridManager.Grids.Keys)
-    //  {
-    //    Grid grid = _GridManager.Grids[pos];
-
-    //    //  Step 1: Offset each grid so it's centered around the device
-    //    Vector2 gridOffset = new Vector2(
-    //        centerOfFullMap.X + (pos.Item1 * gridSize) - devicePosition.X,
-    //        centerOfFullMap.Y + (pos.Item2 * gridSize) - devicePosition.Y
-    //    );
-
-    //    //  Step 2: Draw Grid Lines 
-    //    if (AppSettings.Default.DrawGrids)
-    //    {
-    //      _SpriteBatch.Draw(
-    //          grid.gridLinesCanvas,
-    //          new Rectangle((int)gridOffset.X, (int)gridOffset.Y, gridSize, gridSize),
-    //          Color.White
-    //      );
-    //    }
-
-    //    //  Step 3: Draw LiDAR Hit Tiles
-    //    _SpriteBatch.Draw(
-    //        grid.tilesCanvas,
-    //        new Rectangle((int)gridOffset.X, (int)gridOffset.Y, gridSize, gridSize),
-    //        Color.White
-    //    );
-    //    if (AppSettings.Default.DrawMergedTiles)
-    //    {
-    //      DrawMergedRectangles(devicePosition, centerOfFullMap);
-    //    }
-
-
-
-    //    //  Step 5: Draw the device at the center of the screen
-    //    _SpriteBatch.Draw(
-    //        _device._deviceTexture,
-    //        _device.GetDeviceRectRelative(centerOfFullMap),
-    //        Color.Red
-    //    );
-
-    //    //  Step 6: Draw Map Border
-    //    ContentManagerProvider.DrawRenderTargetBorder(_SpriteBatch, _mapTexture, 5, Color.White);
-    //  }
-    //  //  NOW flush all queued lines in a single draw call
-    //  ContentManagerProvider.DrawQueuedLines(_SpriteBatch);
-    //  _SpriteBatch.End();
-    //  _GraphicsDevice.SetRenderTarget(null);
-    //}
-
     private void DrawMergedRectangles(Vector2 devicePosition, Vector2 centerOfFullMap)
     {
       // IMPORTANT: set minsize here, do not look it up from settings in the if statement. Causes a huge drop in speed
       int minSize = AppSettings.Default.MinMergedTileSize;
       foreach (var (rect, angle, ispermanent) in _map._mergedObjects)
       {
-        if(rect.Width < minSize && rect.Height < minSize)
+        if (rect.Width < minSize && rect.Height < minSize)
         {
           continue;
         }

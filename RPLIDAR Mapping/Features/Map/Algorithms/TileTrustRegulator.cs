@@ -21,6 +21,8 @@ namespace RPLIDAR_Mapping.Features.Map.Algorithms
     private const float MinStableDecayRate = 3f;  // 🟢 NEW: Ensures a stable minimum decay rate
     private float _smoothedDecayRate = 5f;  // 🟢 NEW: Stores a smoothed decay rate
 
+    public float TileTrustTreshHold = 50;
+
     public void Update(float deltaTime)
     {
       var gridStats = StatisticsProvider.GridStats;
@@ -60,8 +62,8 @@ namespace RPLIDAR_Mapping.Features.Map.Algorithms
       float targetThreshold = TileRegulatorSettings.Default.BaseTileTrustThreshold * Math.Clamp(1f + highTrustTilePercentage, 1f, 2f);
 
       // 🟢 **Smooth the threshold change** to avoid rapid oscillations
-      AppSettings.Default.TileTrustThreshold = Math.Clamp(
-          (int)((AppSettings.Default.TileTrustThreshold * (1f - TrustSmoothingFactor)) + (targetThreshold * TrustSmoothingFactor)),
+      TileTrustTreshHold= Math.Clamp(
+          (int)((TileTrustTreshHold * (1f - TrustSmoothingFactor)) + (targetThreshold * TrustSmoothingFactor)),
           TileRegulatorSettings.Default.MinTileTrustThreshold,
           TileRegulatorSettings.Default.MaxTileTrustThreshold
       );

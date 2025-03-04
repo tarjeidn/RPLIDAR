@@ -11,6 +11,7 @@ using SharpDX.Direct2D1.Effects;
 using SharpDX.DirectWrite;
 using System.Diagnostics;
 using RPLIDAR_Mapping.Features.Map.UI;
+using RPLIDAR_Mapping.Features.Map.Algorithms;
 
 namespace RPLIDAR_Mapping.Features.Map.GridModel
 {
@@ -37,6 +38,7 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
     public int TrustDurationCounter { get; private set; }
     public float TrustedScore { get; set; }
     public int AmountofDecays { get; set; }
+    private TileTrustRegulator TTR { get; set;}
     private const int PermanentTrustThreshold = 50;  // How many cycles a tile must stay trusted to be permanent
     private const float TrustDropResetThreshold = 70;  // If trust drops below this, reset counter
 
@@ -53,27 +55,18 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
       IsDrawn = false;
       _selfGrid = grid;
       _tileSize = _selfGrid.tileSize;
-
       //  Get the global position of the grid first
       Vector2 gridGlobalPosition = _selfGrid.GridPosition;
-
       //  Get the tile's position relative to the grid
       Position = new Vector2(X * _tileSize, Y * _tileSize);
-
       //  Correctly calculate GlobalCenter (adjusted for grid position)
       GlobalCenter = gridGlobalPosition + Position + new Vector2(_tileSize / 2.0f, _tileSize / 2.0f);
-
-      //  Create representative MapPoint
-      //_representativeMapPoint = new MapPoint(GlobalCenter.X, GlobalCenter.Y, 0, 0, 0, 0);
-
-      //  Set tile rectangle for rendering
-      //tileRect = new Rectangle((int)GlobalCenter.X - _tileSize / 2, (int)GlobalCenter.Y - _tileSize / 2, _tileSize, _tileSize);
       tileRect = new Rectangle((int)Position.X, (int)Position.Y, _tileSize, _tileSize);
-
       //  Graphics setup
       _SpriteBatch = GraphicsDeviceProvider.SpriteBatch;
       _GridLineTexture = ResizeTexture(ContentManagerProvider.GetTexture("Sprites/Utility/gridline10orange"), _tileSize, _tileSize);
       _TileTexture = ContentManagerProvider.GetTexture("tiletexture");
+      TTR = AlgorithmProvider.TileTrustRegulator;
     }
     public void UpdateTrust()
     {
@@ -95,71 +88,53 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
     }
 
 
-
-    //public void Draw(SpriteBatch spriteBatch, Vector2 gridOffset, float scaleFactor)
-    //{
-    //  const float TrustDropBuffer = 5;  // 🟢 NEW: Buffer to prevent flickering
-
-    //  if (IsDrawn)
-    //  {
-    //    // 🛑 Only remove tile if trust drops significantly below threshold
-    //    if (TrustedScore < AppSettings.Default.TileTrustThreshold - TrustDropBuffer)
-    //    {
-    //      IsDrawn = false;
-    //      return;
-    //    }
-    //  }
-    //  else
-    //  {
-    //    //  Only allow drawing when trust is fully above threshold
-    //    if (TrustedScore >= AppSettings.Default.TileTrustThreshold)
-    //    {
-    //      IsDrawn = true;
-    //    }
-    //    else
-    //    {
-    //      return;  //  Skip drawing if still below threshold
-    //    }
-    //  }
-
-    //  // 🔥 Define color intensity based on TrustedScore
-    //  float intensity = 0;
-    //  if (TrustedScore != 0)
-    //  {
-    //    intensity = MathHelper.Clamp(
-    //        (TrustedScore - AppSettings.Default.TileTrustThreshold) / (100 - AppSettings.Default.TileTrustThreshold),
-    //        0f, 1f
-    //    );
-    //  }
-
-    //  // 🔥 Change colors dynamically: Low trust = Blue, High trust = Red
-    //  Color tileColor = Color.Lerp(Color.Blue, Color.Red, intensity);
-    //  Position = new Vector2(X * _tileSize, Y * _tileSize) + gridOffset;
-
-
-
-    //  //Vector2 position = Position + gridOffset;  //  Apply grid offset
-    //  // 🔥 Draw the tile with dynamic color
-    //  _SpriteBatch.Draw(
-    //      _TileTexture,
-    //      new Rectangle((int)Position.X, (int)Position.Y, _tileSize, _tileSize),
-    //      tileColor
-    //  );
-    //}
-
-    public void Draw(SpriteBatch spriteBatch, Vector2 drawPos)
+    public void Draw(SpriteBatch spriteBatch, Vector2 drawPosition)
     {
-      if (TrustedScore < AppSettings.Default.TileTrustThreshold)
-        return;
+      const float TrustDropBuffer = 5;
 
-      float scaledTileSize = MapScaleManager.Instance.ScaledTileSizePixels;
-      Color tileColor = Color.Lerp(Color.Blue, Color.Red, TrustedScore / 100f);
+      if (IsDrawn)
+      {
+        if (TrustedScore < TTR.TileTrustTreshHold - TrustDropBuffer)
+        {
+          IsDrawn = false;
+          return;
+        }
+      }
+      else
+      {
+        if (TrustedScore >= TTR.TileTrustTreshHold)
+        {
+          IsDrawn = true;
+        }
+        else
+        {
+          return;
+        }
+      }
+
+      float intensity = 0;
+      if (TrustedScore != 0)
+      {
+        intensity = MathHelper.Clamp(
+            (TrustedScore - TTR.TileTrustTreshHold) / (100 - TTR.TileTrustTreshHold),
+            0f, 1f
+        );
+      }
+
+      Color tileColor = Color.Lerp(Color.Blue, Color.Red, intensity);
+
+      // 🔥 Ensure proper tile scaling
+      int tileSize = MapScaleManager.Instance.ScaledTileSizePixels;
 
       spriteBatch.Draw(
-        _TileTexture,
-          new Rectangle((int)drawPos.X, (int)drawPos.Y, (int)scaledTileSize, (int)scaledTileSize),
-          tileColor);
+          _TileTexture,
+          new Rectangle((int)drawPosition.X, (int)drawPosition.Y, tileSize, tileSize),
+          tileColor
+      );
     }
+
+
+
 
 
 

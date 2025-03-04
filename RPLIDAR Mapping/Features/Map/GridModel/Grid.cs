@@ -71,7 +71,7 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
       GridScaleFactor = MapScaleManager.Instance.ScaleFactor;
 
 
-      // ✅ Compute tile size (scaled to cm)
+      //  Compute tile size (scaled to cm)
       tileSize = MapScaleManager.Instance.ScaledTileSizePixels;
       //tileSize = (int)(AppSettings.Default.GridTileSizeCM * GridScaleFactor);
       //if (tileSize < 1) 
@@ -84,18 +84,18 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
       _SpriteBatch = GraphicsDeviceProvider.SpriteBatch;
       _GraphicsDevice = GraphicsDeviceProvider.GraphicsDevice;
 
-      // ✅ Grid position in world space
+      //  Grid position in world space
       GridX = gridX;
       GridY = gridY;
       GridPosition = new Vector2(GridX * GridSizePixels, GridY * GridSizePixels);
 
-      // ✅ Initialize collections (before using them)
+      //  Initialize collections (before using them)
       _updatedTiles = new Dictionary<(int, int), Tile>();
       _drawnTiles = new Dictionary<(int, int), Tile>();
       _trustedTiles = new List<Tile>();
       _drawnTilesList = new List<Tile>();
 
-      // ✅ Create render targets with the scaled grid size
+      //  Create render targets with the scaled grid size
       gridLinesCanvas = new RenderTarget2D(_GraphicsDevice, GridSizePixels, GridSizePixels);
       tilesCanvas = new RenderTarget2D(_GraphicsDevice, GridSizePixels, GridSizePixels);
     }
@@ -156,7 +156,7 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
       Tile tile = GetTileAt(X, Y);
       tile._lastLIDARpoint = point;
 
-      // ✅ Scale cm values directly into pixels
+      //  Scale cm values directly into pixels
       float scaledX = point.GlobalX * GridManager.GridScaleFactor;
       float scaledY = point.GlobalY * GridManager.GridScaleFactor; ;
 
@@ -211,29 +211,9 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
       }
       return _drawnTilesList;
     }
-    //public void DrawTiles(SpriteBatch spriteBatch, Vector2 gridOffset)
-    //{
-
-    //  Camera camera = UtilityProvider.Camera;
-    //  foreach (Tile tile in _drawnTiles.Values)
-    //  {
-    //    if (tile.TrustedScore >= AppSettings.Default.TileTrustThreshold)
-    //    {
-    //      //  Update drawing positions for all points in this tile (zoom adjustment)
-    //      if (tile._lastLIDARpoint != null)
-    //      {
-    //        //Vector2 drawPos = gridOffset + new Vector2(tile.X * tileSize, tile.Y * tileSize);
-
-    //        Vector2 drawPos = new Vector2(tile.Position.X, tile.Position.Y) + gridOffset;
 
 
-    //        tile._lastLIDARpoint.UpdateDrawingPosition(camera.GetViewportBounds(GridSizePixels), camera.Zoom, GridManager.GridScaleFactor);
-    //      }
 
-    //      tile.Draw(spriteBatch, gridOffset, GridManager.GridScaleFactor);  //  Draw tiles directly onto the map texture
-    //    }
-    //  }
-    //}
     public void DrawTiles(SpriteBatch spriteBatch, Vector2 gridOffset)
     {
       Camera camera = UtilityProvider.Camera;

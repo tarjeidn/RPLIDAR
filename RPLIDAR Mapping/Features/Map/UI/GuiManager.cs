@@ -77,7 +77,7 @@ public class GuiManager
     }
     float zoom = AppSettings.Default.MapZoom;
     float gridScaleFactor = MapScaleManager.Instance.ScaleFactor;
-    if (ImGui.SliderFloat("Grid Scale", ref gridScaleFactor, 0.1f, 10.0f, "%.2f"))
+    if (ImGui.SliderFloat("Grid Scale", ref gridScaleFactor, 0.1f, 4.0f, "%.2f"))
       MapScaleManager.Instance.SetScaleFactor(gridScaleFactor);
 
 

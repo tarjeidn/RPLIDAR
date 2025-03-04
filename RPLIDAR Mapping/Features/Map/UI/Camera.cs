@@ -56,29 +56,29 @@ namespace RPLIDAR_Mapping.Features.Map.UI
       int viewportWidth = (int)(ScreenWidth / Zoom);
       int viewportHeight = (int)(ScreenHeight / Zoom);
 
-      // ✅ Center viewport properly, allowing negative coordinates
+      //  Center viewport properly, allowing negative coordinates
       int viewportX = (int)(Position.X - viewportWidth / 2);
       int viewportY = (int)(Position.Y - viewportHeight / 2);
 
-      // ✅ Expand viewport slightly to avoid missing edge grids
+      //  Expand viewport slightly to avoid missing edge grids
       return new Rectangle(viewportX - gridSize, viewportY - gridSize, viewportWidth + 2 * gridSize, viewportHeight + 2 * gridSize);
     }
 
     public Rectangle GetSourceRectangle()
     {
-      // ✅ Compute the visible area size based on zoom
+      //  Compute the visible area size based on zoom
       int sourceWidth = (int)(MapWidth / Zoom);
       int sourceHeight = (int)(MapHeight / Zoom);
 
-      // ✅ Prevent source rectangle from becoming larger than the map texture
+      //  Prevent source rectangle from becoming larger than the map texture
       sourceWidth = Math.Clamp(sourceWidth, 1, MapWidth);
       sourceHeight = Math.Clamp(sourceHeight, 1, MapHeight);
 
-      // ✅ Center the view on the device position
+      //  Center the view on the device position
       int sourceX = (int)(Position.X - sourceWidth / 2);
       int sourceY = (int)(Position.Y - sourceHeight / 2);
 
-      // ✅ Ensure sourceX and sourceY do not go out of bounds
+      //  Ensure sourceX and sourceY do not go out of bounds
       sourceX = Math.Clamp(sourceX, 0, MapWidth - sourceWidth);
       sourceY = Math.Clamp(sourceY, 0, MapHeight - sourceHeight);
 
@@ -89,7 +89,7 @@ namespace RPLIDAR_Mapping.Features.Map.UI
 
     public Rectangle GetDestinationRectangle(Vector2? targetPosition = null)
     {
-      // ✅ Use default position if no position is provided
+      //  Use default position if no position is provided
       Vector2 position = targetPosition ?? DestRectPos;
 
       return new Rectangle(
