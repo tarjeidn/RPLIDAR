@@ -57,7 +57,7 @@
       <Value Profile="(Default)">serial</Value>
     </Setting>
     <Setting Name="LIDARDataBatchSize" Type="System.Int32" Scope="User">
-      <Value Profile="(Default)">45</Value>
+      <Value Profile="(Default)">100</Value>
     </Setting>
     <Setting Name="TileDecayRate" Type="System.Int32" Scope="User">
       <Value Profile="(Default)">10</Value>

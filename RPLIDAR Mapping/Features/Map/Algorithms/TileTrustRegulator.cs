@@ -2,6 +2,7 @@
 using RPLIDAR_Mapping.Utilities;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -11,110 +12,97 @@ namespace RPLIDAR_Mapping.Features.Map.Algorithms
   public class TileTrustRegulator
   {
     private float _decayAdjustmentCooldown = 0;
-    private const float HighTrustThreshold = 90;
-    private const float MaxTrust = 100;
-    private const float MinTrust = 0;
 
-    private const float TrustThresholdBuffer = 5;  // 🟢 Prevents flickering
-    private const float TrustSmoothingFactor = 0.1f;  // 🟢 Dampens sharp trust changes
-    private const float DecaySmoothingFactor = 0.05f;  // 🟢 NEW: Gradually adjusts decay rate
-    private const float MinStableDecayRate = 3f;  // 🟢 NEW: Ensures a stable minimum decay rate
-    private float _smoothedDecayRate = 5f;  // 🟢 NEW: Stores a smoothed decay rate
+    // PID Constants (Tune These)
+    private float Kp = 0.5f;  // Proportional gain (direct correction)
+    private float Ki = 0.1f;  // Integral gain (accumulates correction)
+    private float Kd = 0.2f;  // Derivative gain (smooths oscillations)
 
+    private float _integral = 0;
+    private float _previousError = 0;
+
+    private const float MinStableDecayRate = 3f;
+    private float _smoothedDecayRate = 5f;
+
+    private float _integralDecay = 0;
+    private float _previousErrorDecay = 0;
+
+    private float _integralTrust = 0;
+    private float _previousErrorTrust = 0;
+
+    public bool RegulatorEnabled = false;
+    public float TrustIncrement = 50;
+    public float TrustDecrement = 2;
+
+    public int TileDecayRate = 10;
+    public int MaxTileDecayRate = 300;
+
+    public int DecayFrequency = 20;
+    public int TrustThreshold = 50;
     public float TileTrustTreshHold = 50;
+
+    public int MinTileTrustThreshold = 10;
+    public int MaxTileTrustThreshold = 100;
+    public int BaseTileTrustThreshold = 50;
+
+    private float TimeSinceLastUpdate = 0;
 
     public void Update(float deltaTime)
     {
       var gridStats = StatisticsProvider.GridStats;
-      int currentTileCount = gridStats.TotalHitTiles;
-      float pointsPerSecond = StatisticsProvider.MapStats.PointsPerSecond;
+      TimeSinceLastUpdate += deltaTime;
 
-      int highTrustTileHits = gridStats.HighTrustTileHits;
-      int totalHighTrustTiles = gridStats.TotalHighTrustTiles;
-      float highTrustTilePercentage = gridStats.HighTrustTilePercentage;
+      if (gridStats.HighTrustTilesLostLastCycle > 0)
+      {
+ 
+        int highTrustTileLoss = gridStats.HighTrustTilesLostLastCycle; // 🔹 Track lost trusted tiles per decay cycle
+        int totalHighTrustTiles = gridStats.TotalHighTrustTiles;
+        float highTrustTilePercentage = gridStats.HighTrustTilePercentage;
+        // Target: Maintain a stable number of high-trust tiles lost per cycle
+        float targetTrustLoss = totalHighTrustTiles * 0.02f;  // 🔹 Aim for 2% loss per cycle
+        float errorDecay = targetTrustLoss - highTrustTileLoss;
 
-      int totalPointsAdded = gridStats.TotalPointsAddedLastBatch;
-      int uniqueTilesHit = gridStats.UniqueTilesHitLastBatch;
-      int batchSize = 45;
+        // 🔹 Compute Decay Rate Adjustment Using PID
+        _integralDecay += errorDecay * TimeSinceLastUpdate;
+        float derivativeDecay = (errorDecay - _previousErrorDecay) / TimeSinceLastUpdate;
+        _previousErrorDecay = errorDecay;
 
-      //  Adjust every second
-      _decayAdjustmentCooldown += deltaTime;
-      if (_decayAdjustmentCooldown < 1f) return;
-      _decayAdjustmentCooldown = 0;
+        float decayAdjustment = (Kp * errorDecay) + (Ki * _integralDecay) + (Kd * derivativeDecay);
+        _smoothedDecayRate = Math.Clamp(_smoothedDecayRate + decayAdjustment, MinStableDecayRate, MaxTileDecayRate);
 
-      // 🟢 Adjust decay dynamically based on tile activity
-      float decayTarget = Math.Max(
-          MinStableDecayRate,  //  Ensures decay never becomes too aggressive
-          TileRegulatorSettings.Default.BaseTileDecayRate *
-          (1f + (totalHighTrustTiles / 2000f) + (currentTileCount / 3000f))
-      );
+        TileDecayRate = (int)_smoothedDecayRate;
 
-      // 🟢 Smoothly adjust decay rate to avoid large fluctuations
-      _smoothedDecayRate = (_smoothedDecayRate * (1f - DecaySmoothingFactor)) + (decayTarget * DecaySmoothingFactor);
+        // 🔹 Compute Trust Adjustment Using PID
+        float targetHighTrustTiles = totalHighTrustTiles * 0.8f;  // 🔹 Target: Maintain 80% of previously trusted tiles
+        float errorTrust = targetHighTrustTiles - totalHighTrustTiles;
 
-      AppSettings.Default.TileDecayRate = Math.Clamp(
-          (int)_smoothedDecayRate,
-          1,
-          TileRegulatorSettings.Default.MaxTileDecayRate
-      );
+        _integralTrust += errorTrust * TimeSinceLastUpdate;
+        float derivativeTrust = (errorTrust - _previousErrorTrust) / TimeSinceLastUpdate;
+        _previousErrorTrust = errorTrust;
 
-      // 🎨 Adjust tile trust threshold dynamically (prevent flickering)
-      float targetThreshold = TileRegulatorSettings.Default.BaseTileTrustThreshold * Math.Clamp(1f + highTrustTilePercentage, 1f, 2f);
+        float trustAdjustment = (Kp * errorTrust) + (Ki * _integralTrust) + (Kd * derivativeTrust);
 
-      // 🟢 **Smooth the threshold change** to avoid rapid oscillations
-      TileTrustTreshHold= Math.Clamp(
-          (int)((TileTrustTreshHold * (1f - TrustSmoothingFactor)) + (targetThreshold * TrustSmoothingFactor)),
-          TileRegulatorSettings.Default.MinTileTrustThreshold,
-          TileRegulatorSettings.Default.MaxTileTrustThreshold
-      );
+        // 🔹 Adjust Trust Increment and Decrement
+        TrustIncrement = Math.Clamp(TrustIncrement + trustAdjustment, 10, 100);  // Prevent extreme trust jumps
+        TrustDecrement = Math.Clamp(TrustDecrement - trustAdjustment * 0.5f, 1, 20);  // Smoother decrement control
+
+        // 🎨 Adjust trust threshold dynamically
+        float targetThreshold = BaseTileTrustThreshold * Math.Clamp(1f + highTrustTilePercentage, 1f, 2f);
+
+        // 🔹 Smooth trust threshold changes
+        TileTrustTreshHold = Math.Clamp(
+            (int)((TileTrustTreshHold * 0.9f) + (targetThreshold * 0.1f)),  // 🔹 Soft smoothing factor
+            MinTileTrustThreshold,
+            MaxTileTrustThreshold
+        );
+      }
+      TimeSinceLastUpdate = 0;
     }
   }
 
+ 
 
 
-
-
-
-
-
-  //public void Update(float deltaTime)
-  //{
-  //  int currentTileCount = StatisticsProvider.GridStats.TotalHitTiles;
-  //  float pointsPerSecond = StatisticsProvider.MapStats.PointsPerSecond;
-
-  //  //  Adjust decay frequency and trust values dynamically every second
-  //  _decayAdjustmentCooldown += deltaTime;
-  //  if (_decayAdjustmentCooldown < 1f) return;
-  //  _decayAdjustmentCooldown = 0;
-
-  //  // 📉 Adjust trust increment per hit (less trust added if too many new points)
-  //  AppSettings.Default.TileTrustIncrement = Math.Clamp(
-  //      (int)(TileRegulatorSettings.Default.BaseTileTrustIncrement * (1f - pointsPerSecond / 500f)),
-  //      1,
-  //      TileRegulatorSettings.Default.MaxTileTrustIncrement
-  //  );
-
-  //  // 📉 Adjust decay rate dynamically based on tile count (more tiles → faster decay)
-  //  AppSettings.Default.TileDecayRate = Math.Clamp(
-  //      (int)(TileRegulatorSettings.Default.BaseTileDecayRate * (1f + currentTileCount / 1000f)),
-  //      1,
-  //      TileRegulatorSettings.Default.MaxTileDecayRate
-  //  );
-
-  //  // 📉 Adjust trust decay per step (higher if too many tiles)
-  //  AppSettings.Default.TileTrustDecrement = Math.Clamp(
-  //      (int)(TileRegulatorSettings.Default.BaseTileTrustDecrement * (1f + currentTileCount / 500f)),
-  //      1,
-  //      TileRegulatorSettings.Default.MaxTileTrustDecrement
-  //  );
-
-  //  // 🎨 Adjust tile drawing threshold dynamically (avoid clutter)
-  //  AppSettings.Default.TileTrustThreshold = Math.Clamp(
-  //      (int)(TileRegulatorSettings.Default.BaseTileTrustThreshold * (1f + currentTileCount / 2000f)),
-  //      TileRegulatorSettings.Default.MinTileTrustThreshold,
-  //      TileRegulatorSettings.Default.MaxTileTrustThreshold
-  //  );
-  //}
 }
 
 

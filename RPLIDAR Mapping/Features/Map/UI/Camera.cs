@@ -1,11 +1,9 @@
 ﻿using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework;
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using RPLIDAR_Mapping.Utilities;
+using System.Diagnostics;
+using SharpDX.Direct2D1.Effects;
 
 namespace RPLIDAR_Mapping.Features.Map.UI
 {
@@ -14,94 +12,95 @@ namespace RPLIDAR_Mapping.Features.Map.UI
     public float Zoom { get; private set; } = 1f;
     private int MapWidth;
     private int MapHeight;
-    private int DestRectHeight;
-    private int DestRectWidth;
+    private Vector2 _lastZoomFocus;
     private int ScreenWidth;
     private int ScreenHeight;
     private Vector2 DestRectPos;
     public Vector2 Position { get; private set; } = Vector2.Zero;
+    public Vector2 ZoomFocusPoint { get; private set; } 
+
     private GraphicsDevice _graphicsDevice;
+    private int _gridSize;
 
     public Camera(GraphicsDevice graphicsDevice)
     {
       _graphicsDevice = graphicsDevice;
       ScreenWidth = _graphicsDevice.Viewport.Width;
       ScreenHeight = _graphicsDevice.Viewport.Height;
-      DestRectHeight = (int)(ScreenHeight * 0.8);
-      DestRectWidth = (int)(ScreenHeight * 0.8);
-      DestRectPos = new Vector2((int)(ScreenHeight *0.05), (int)(ScreenHeight*0.05));
-      MapWidth = AppSettings.Default.MapWindowWidth;
-      MapHeight = AppSettings.Default.MapWindowHeight;
+      ZoomFocusPoint = Vector2.Zero;
+      DestRectPos = new Vector2((int)(ScreenHeight * 0.05), (int)(ScreenHeight * 0.05));
+      MapWidth = (int)(ScreenWidth * 0.6);
+      MapHeight = (int)(ScreenHeight * 0.8);
+
+      _gridSize = MapScaleManager.Instance.ScaledGridSizePixels;
     }
 
-    // 🔄 Update zoom from GUI slider
+    ////  Update zoom from GUI slider
     public void SetZoom(float zoomFactor)
     {
-      Zoom = MathHelper.Clamp(1f / zoomFactor, 0.2f, 5f); // Inverted zoom logic
+      Zoom = MathHelper.Clamp(zoomFactor, 0.05f, 1f);
     }
 
-    // 🔄 Center camera on a specific point with aspect ratio correction
+    //  Add a getter for debugging
+    public Vector2 GetLastZoomFocus()
+    {
+      return _lastZoomFocus;
+    }
+
+
+    //  Center camera on a specific point with aspect ratio correction
     public void CenterOn(Vector2 targetPosition)
     {
       Position = targetPosition;
     }
+
     public Vector2 WorldToScreen(Vector2 worldPosition)
     {
-      // Apply transformation: Move world coordinates relative to camera viewport and scale
-      return (worldPosition - Position) * Zoom;
+      Vector2 screenCenter = GetDestinationRectangle().Center.ToVector2();
+      //return screenCenter + (worldPosition - Position) * Zoom;
+      float scale = MapScaleManager.Instance.ScaleFactor; // 🔥 Use scale factor
+      Vector2 baseOffset = (worldPosition - Position); // Distance from camera position
+      Vector2 zoomedOffset = baseOffset * (1f / Zoom); // Apply zoom before scaling
+      Vector2 scaledOffset = zoomedOffset / scale; // Scale after zoom
+      return screenCenter + scaledOffset;
     }
 
-    public Rectangle GetViewportBounds(int gridSize)
-    {
-      int viewportWidth = (int)(ScreenWidth / Zoom);
-      int viewportHeight = (int)(ScreenHeight / Zoom);
 
-      //  Center viewport properly, allowing negative coordinates
-      int viewportX = (int)(Position.X - viewportWidth / 2);
-      int viewportY = (int)(Position.Y - viewportHeight / 2);
 
-      //  Expand viewport slightly to avoid missing edge grids
-      return new Rectangle(viewportX - gridSize, viewportY - gridSize, viewportWidth + 2 * gridSize, viewportHeight + 2 * gridSize);
-    }
+    //public Rectangle GetViewportBounds()
+    //{
+    //  int viewportWidth = (int)(MapWidth * Zoom) + MapScaleManager.Instance.BaseGridSizePixels;
+    //  int viewportHeight = (int)(MapHeight * Zoom) + MapScaleManager.Instance.BaseGridSizePixels;
+    //  int viewportX = (int)(Position.X - viewportWidth / 2);
+    //  int viewportY = (int)(Position.Y - viewportHeight / 2);
+
+    //  return new Rectangle(viewportX, viewportY, viewportWidth, viewportHeight);
+    //}
 
     public Rectangle GetSourceRectangle()
     {
-      //  Compute the visible area size based on zoom
-      int sourceWidth = (int)(MapWidth / Zoom);
-      int sourceHeight = (int)(MapHeight / Zoom);
-
-      //  Prevent source rectangle from becoming larger than the map texture
-      sourceWidth = Math.Clamp(sourceWidth, 1, MapWidth);
-      sourceHeight = Math.Clamp(sourceHeight, 1, MapHeight);
-
-      //  Center the view on the device position
-      int sourceX = (int)(Position.X - sourceWidth / 2);
-      int sourceY = (int)(Position.Y - sourceHeight / 2);
-
-      //  Ensure sourceX and sourceY do not go out of bounds
-      sourceX = Math.Clamp(sourceX, 0, MapWidth - sourceWidth);
-      sourceY = Math.Clamp(sourceY, 0, MapHeight - sourceHeight);
+      float scale = MapScaleManager.Instance.ScaleFactor;
+      int sourceWidth = (int)((MapWidth * scale) / Zoom);
+      int sourceHeight = (int)((MapHeight * scale) / Zoom );
+      int sourceX = (int)(Position.X - (sourceWidth / 2));
+      int sourceY = (int)(Position.Y - (sourceHeight / 2));
 
       return new Rectangle(sourceX, sourceY, sourceWidth, sourceHeight);
     }
 
-
-
-    public Rectangle GetDestinationRectangle(Vector2? targetPosition = null)
+    public Rectangle GetDestinationRectangle()
     {
-      //  Use default position if no position is provided
-      Vector2 position = targetPosition ?? DestRectPos;
-
+      // Do not scale this with zoom, this is a constant size
       return new Rectangle(
-          (int)position.X,
-          (int)position.Y,
-          DestRectWidth,
-          DestRectHeight
+          (int)DestRectPos.X,
+          (int)DestRectPos.Y,
+          (int)(MapWidth), 
+          (int)(MapHeight) 
       );
     }
   }
+}
 
 
 
-
-  }
+  

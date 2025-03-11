@@ -235,7 +235,7 @@ namespace RPLIDAR_Mapping {
         
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("45")]
+        [global::System.Configuration.DefaultSettingValueAttribute("100")]
         public int LIDARDataBatchSize {
             get {
                 return ((int)(this["LIDARDataBatchSize"]));

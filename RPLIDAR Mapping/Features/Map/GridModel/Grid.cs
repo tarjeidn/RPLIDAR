@@ -13,6 +13,7 @@ using RPLIDAR_Mapping.Features.Map.Statistics;
 using RPLIDAR_Mapping.Features.Map.UI;
 using RPLIDAR_Mapping.Core;
 using SharpDX.Direct2D1.Effects;
+using RPLIDAR_Mapping.Features.Map.Algorithms;
 
 
 
@@ -22,7 +23,7 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
   {
     public int GridX { get; }
     public int GridY { get; }
-    public Vector2 GridPosition { get; private set; }
+    public Vector2 GridPosition { get;  set; }
 
     public readonly float GridScaleMmToPixels;
 
@@ -43,6 +44,7 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
     public List<Tile> _trustedTiles;
     public GridManager GridManager;
     public GridStats Stats;
+    private TileTrustRegulator TTR =  AlgorithmProvider.TileTrustRegulator;
     public int DrawnTileCount => _drawnTiles.Count;
     float permanentDecayModifier = 0.5f;  //  Permanent tiles decay at half speed
     public float GridScaleFactor;
@@ -107,14 +109,11 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
 
 
 
-    public void Update()
+    public bool Update()
     {
+      bool gridupdated = false;
 
-      if (StatisticsProvider.MapStats.AddPointUpdates % AppSettings.Default.TileDecayRate == 0)
-      {
-        StatisticsProvider.GridStats.FinalizeBatch();
-        DecayTiles();
-      }
+      return gridupdated; 
     }
     public void DecayTiles()
     {
@@ -130,12 +129,12 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
         //}
         if (tile.IsPermanent)
         {
-          tile.TrustedScore = Math.Max(0, tile.TrustedScore - (AppSettings.Default.TileTrustDecrement * permanentDecayModifier));
-        }
-        else
-        {
-          tile.TrustedScore = Math.Max(0, tile.TrustedScore - AppSettings.Default.TileTrustDecrement);
-        }
+          tile.TrustedScore = Math.Max(0, tile.TrustedScore - (TTR.TrustDecrement * permanentDecayModifier));
+          if (tile.TrustedScore < TTR.TrustThreshold) Stats.HighTrustTilesLostLastCycle++;
+        } else tile.TrustedScore = Math.Max(0, tile.TrustedScore - TTR.TrustDecrement);
+
+
+
 
         if (tile.TrustedScore <= 0)
         {
@@ -165,7 +164,7 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
                                   tile.GlobalCenter.Y * GridManager.GridScaleFactor);
 
 
-      tile.TrustedScore = Math.Min(100, tile.TrustedScore + AppSettings.Default.TileTrustIncrement);
+      tile.TrustedScore = Math.Min(100, tile.TrustedScore + TTR.TrustIncrement);
 
       _drawnTiles.TryAdd((X, Y), tile);
       StatisticsProvider.GridStats.RegisterPointAdded(X, Y);
@@ -210,30 +209,6 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
         _drawnTilesList.Add(tile);
       }
       return _drawnTilesList;
-    }
-
-
-
-    public void DrawTiles(SpriteBatch spriteBatch, Vector2 gridOffset)
-    {
-      Camera camera = UtilityProvider.Camera;
-
-      foreach (Tile tile in _drawnTiles.Values)
-      {
-        if (tile.TrustedScore >= AppSettings.Default.TileTrustThreshold)
-        {
-          Vector2 drawPos = new Vector2(tile.X * MapScaleManager.Instance.ScaledTileSizePixels,
-                                        tile.Y * MapScaleManager.Instance.ScaledTileSizePixels)
-                            + gridOffset;
-
-          tile.Draw(spriteBatch, drawPos);
-        }
-      }
-    }
-    public Vector2 GetWorldPosition()
-    {
-      float scaledGridSize = MapScaleManager.Instance.ScaledGridSizePixels;
-      return new Vector2(GridX * scaledGridSize, GridY * scaledGridSize);
     }
 
 

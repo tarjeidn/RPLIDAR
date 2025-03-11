@@ -30,21 +30,6 @@ namespace RPLIDAR_Mapping.Models
       GlobalX = globalX;
       GlobalY = globalY;
     }
-    //  Update drawing coordinates when zoom changes (but NOT global coordinates)
-    //  Update drawing coordinates when zoom OR GridScaleFactor changes
-    public void UpdateDrawingPosition(Rectangle view, float zoom, float scaleFactor)
-    {
-      X = (GlobalX - view.X) * zoom * scaleFactor;
-      Y = (GlobalY - view.Y) * zoom * scaleFactor;
-    }
-
-    //public void UpdateDrawingPosition(Rectangle view, float zoom)
-    //{
-    //  X = (GlobalX - view.X) * zoom;
-    //  Y = (GlobalY - view.Y) * zoom;
-    //}
-
-
   }
 
 }

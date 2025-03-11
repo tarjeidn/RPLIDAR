@@ -1,4 +1,5 @@
 ﻿using RPLIDAR_Mapping.Core;
+using RPLIDAR_Mapping.Features.Map.Algorithms;
 using RPLIDAR_Mapping.Features.Map.Statistics;
 using RPLIDAR_Mapping.Features.Map.UI;
 using RPLIDAR_Mapping.Models;
@@ -25,6 +26,7 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
     public GridStats GridStats { get; set; }
     public List<MapPoint> _globalTrustedMapPoints {  get; set; }
     public Dictionary<(int, int), Grid> Grids { get; set; }
+    private TileTrustRegulator TTR = AlgorithmProvider.TileTrustRegulator;
     public int TotalDrawnTiles => Grids.Values.Sum(grid => grid._drawnTiles.Count);
     public float GridScaleFactor {get; set;}
 
@@ -60,13 +62,22 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
 
 
 
-    public void Update()
+    public bool Update()
     {
+      bool doDecay = StatisticsProvider.MapStats.AddPointUpdates % TTR.DecayFrequency == 0;
+      if (doDecay) GridStats.HighTrustTilesLostLastCycle = 0;
+      bool gridupdated = false;
       GridStats.Update();
       foreach (Grid grid in Grids.Values)
-      {
-        grid.Update();
+      {        
+        if (doDecay) {
+          grid.DecayTiles();
+          gridupdated = true;
+        }
+        if (grid.Update()) gridupdated = true;
       }
+      StatisticsProvider.GridStats.FinalizeBatch();
+      return gridupdated;
     }
 
     private Grid GetOrCreateGrid(int gridX, int gridY)
@@ -92,17 +103,20 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
         int gridX = (int)Math.Floor(point.GlobalX / scaledGridSize);
         int gridY = (int)Math.Floor(point.GlobalY / scaledGridSize);
 
-        //  Compute correct local tile position within the grid
-        int localX = Utility.Modulo((int)(point.GlobalX - gridX * scaledGridSize), (int)scaledGridSize) / (int)scaledTileSize;
-        int localY = Utility.Modulo((int)(point.GlobalY - gridY * scaledGridSize), (int)scaledGridSize) / (int)scaledTileSize;
+        int maxTilesPerGrid = (int)(scaledGridSize / scaledTileSize);
 
-        //  Prevent out-of-bounds errors
+        int localX = Math.Clamp((int)((point.GlobalX - (gridX * scaledGridSize)) / scaledTileSize), 0, maxTilesPerGrid - 1);
+        int localY = Math.Clamp((int)((point.GlobalY - (gridY * scaledGridSize)) / scaledTileSize), 0, maxTilesPerGrid - 1);
+
+
+
         if (localX < 0 || localX >= (int)scaledGridSize / (int)scaledTileSize ||
             localY < 0 || localY >= (int)scaledGridSize / (int)scaledTileSize)
         {
           Debug.WriteLine($"⚠ WARNING: Tile ({localX}, {localY}) out of bounds! (Grid {gridX}, {gridY})");
           continue;
         }
+
 
         //  Fetch or create the grid and add the point
         GetOrCreateGrid(gridX, gridY).AddPoint(localX, localY, point);

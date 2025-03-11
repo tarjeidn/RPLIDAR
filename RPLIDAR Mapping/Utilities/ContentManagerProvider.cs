@@ -148,11 +148,11 @@ namespace RPLIDAR_Mapping.Utilities
 
       throw new KeyNotFoundException($"Font '{fontName}' not found. Make sure it is loaded.");
     }
-    public static void DrawRenderTargetBorder(SpriteBatch spriteBatch,  RenderTarget2D target, int thickness, Color borderColor)
+    public static void DrawRenderTargetBorder(SpriteBatch spriteBatch,  Rectangle target, int thickness, Color borderColor)
     {
 
-      int width = target.Width;
-      int height = target.Height;
+      int width = (int)target.Width;
+      int height = (int)target.Height;
 
 
 
@@ -167,54 +167,7 @@ namespace RPLIDAR_Mapping.Utilities
 
 
     }
-    public static void DrawRectangleBorder(SpriteBatch spriteBatch, Rectangle rect, int thickness, Color borderColor)
-    {
-      Camera camera = UtilityProvider.Camera;
-      Rectangle viewportBounds = camera.GetViewportBounds(rect.Width); // Get current viewport bounds
-
-      //  Ensure the rectangle's coordinates are correctly adjusted for scaling
-      int x = rect.X;
-      int y = rect.Y;
-      int width = rect.Width;
-      int height = rect.Height;
-
-      //  Fix for negative coordinates: Translate to screen space
-      Vector2 screenPos = camera.WorldToScreen(new Vector2(x, y));
-      x = (int)screenPos.X;
-      y = (int)screenPos.Y;
-
-      //  Ensure the rectangle is still within the viewport after transformation
-      Rectangle transformedRect = new Rectangle(x, y, width, height);
-      if (!viewportBounds.Intersects(transformedRect)) return;
-
-      //  Adjust clipping to make sure partially visible borders are drawn correctly
-      int topY = Math.Max(y, viewportBounds.Y);
-      int topStartX = Math.Max(x, viewportBounds.X);
-      int topEndX = Math.Min(x + width, viewportBounds.X + viewportBounds.Width);
-      if (topEndX > topStartX)
-        spriteBatch.Draw(WhiteTexture, new Rectangle(topStartX, topY, topEndX - topStartX, thickness), borderColor);
-
-      // Bottom border
-      int bottomY = y + height - thickness;
-      int bottomStartX = Math.Max(x, viewportBounds.X);
-      int bottomEndX = Math.Min(x + width, viewportBounds.X + viewportBounds.Width);
-      if (bottomEndX > bottomStartX)
-        spriteBatch.Draw(WhiteTexture, new Rectangle(bottomStartX, bottomY, bottomEndX - bottomStartX, thickness), borderColor);
-
-      // Left border
-      int leftX = Math.Max(x, viewportBounds.X);
-      int leftStartY = Math.Max(y, viewportBounds.Y);
-      int leftEndY = Math.Min(y + height, viewportBounds.Y + viewportBounds.Height);
-      if (leftEndY > leftStartY)
-        spriteBatch.Draw(WhiteTexture, new Rectangle(leftX, leftStartY, thickness, leftEndY - leftStartY), borderColor);
-
-      // Right border
-      int rightX = x + width - thickness;
-      int rightStartY = Math.Max(y, viewportBounds.Y);
-      int rightEndY = Math.Min(y + height, viewportBounds.Y + viewportBounds.Height);
-      if (rightEndY > rightStartY)
-        spriteBatch.Draw(WhiteTexture, new Rectangle(rightX, rightStartY, thickness, rightEndY - rightStartY), borderColor);
-    }
+   
 
     //public static void DrawRectangleBorder(SpriteBatch spriteBatch, Rectangle rect, int thickness, Color borderColor)
     //{

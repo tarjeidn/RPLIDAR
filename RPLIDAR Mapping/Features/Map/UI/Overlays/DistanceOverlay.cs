@@ -37,7 +37,7 @@ namespace RPLIDAR_Mapping.Features.Map.UI.Overlays
     {
       if (!_isEnabled) return; // Skip drawing if disabled
 
-      Rectangle viewport = _camera.GetViewportBounds(_gridManager._gridSizePixels);
+      Rectangle viewport = _camera.GetSourceRectangle();
       float scaleFactor = _gridManager.GridScaleFactor;
       float markerSpacing = 100 * scaleFactor;
 

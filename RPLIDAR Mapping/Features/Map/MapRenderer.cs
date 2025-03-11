@@ -15,6 +15,8 @@ using System.Diagnostics;
 using System.ComponentModel;
 using RPLIDAR_Mapping.Features.Map.UI;
 using RPLIDAR_Mapping.Features.Map.UI.Overlays;
+using SharpDX.DirectWrite;
+
 
 
 
@@ -28,25 +30,36 @@ namespace RPLIDAR_Mapping.Features.Map
     public readonly GraphicsDevice _GraphicsDevice;
     private readonly SpriteBatch _SpriteBatch;
     public readonly GridManager _GridManager;
+    public Camera _Camera;
     private readonly DistanceOverlay _distanceOverlay;
+    private Queue<(int, int)> _gridDrawQueue = new Queue<(int, int)>();
+    private bool _isQueueInitialized = false;
+    private int MaxGridsPerFrame = 5; // 🔥 Can be adjusted dynamically
     //private readonly float _scale; // Scale factor for visualization
     private Map _map;
     private int _mapTextureSize;
     private int _ScaledTileSize;
     private int _gridSize;
+    public int MainScreenWidth = GraphicsAdapter.DefaultAdapter.CurrentDisplayMode.Width;
+    public int MainScreenHeight = GraphicsAdapter.DefaultAdapter.CurrentDisplayMode.Height;
+    public bool DrawCycleActive = false;
+    public Vector2 MainScreenSize;
     public Device _device;
-    private Vector2 _centerOfFullMap;
+    public Vector2 _centerOfFullMap {  get; set; }
 
     public MapRenderer(Map map)
     {
+      _Camera = UtilityProvider.Camera;
+
+      MainScreenSize = new Vector2(MainScreenWidth, MainScreenHeight);
       _ScaledTileSize = AppSettings.Default.GridTileSizeCM * AppSettings.Default.GridScaleCMtoPixels;
       _GraphicsDevice = GraphicsDeviceProvider.GraphicsDevice;
       _SpriteBatch = GraphicsDeviceProvider.SpriteBatch;
       _map = map;
       _GridManager = _map.GetDistributor()._GridManager;
       _gridSize = _GridManager._gridSizePixels;
-      _mapTexture = new RenderTarget2D(_GraphicsDevice, AppSettings.Default.MapWindowWidth, AppSettings.Default.MapWindowHeight);
-      _centerOfFullMap = new Vector2(_mapTexture.Width / 2, _mapTexture.Height / 2);
+      //_mapTexture = new RenderTarget2D(_GraphicsDevice, AppSettings.Default.MapWindowWidth, AppSettings.Default.MapWindowHeight);
+
       // Create a 1x1 white texture for rendering points
       _pointTexture = new Texture2D(_GraphicsDevice, 1, 1);
       _pointTexture.SetData(new[] { Color.White });
@@ -58,39 +71,35 @@ namespace RPLIDAR_Mapping.Features.Map
 
     }
 
-    public void DrawRawPoint(SpriteBatch spriteBatch, List<MapPoint> points, Vector2 center)
-    {
-      foreach (var point in points)
-      {
-        // Transform the point to screen coordinates
-        Vector2 screenPoint = center + new Vector2(point.X, point.Y) * AppSettings.Default.MapZoom;
 
-        // Draw the point
-        spriteBatch.Draw(_pointTexture, screenPoint, null, Color.Red, 0, Vector2.Zero, 2f, SpriteEffects.None, 0);
-      }
-    }
-    public void DrawGrids(Vector2 devicePosition)
+    public void DrawGrids(Vector2 devicePosition, int gridsDrawn)
     {
+
       Camera camera = UtilityProvider.Camera;
-      float scaleFactor = MapScaleManager.Instance.ScaleFactor;
       int scaledGridSize = MapScaleManager.Instance.ScaledGridSizePixels;
+      Rectangle sourceBounds = camera.GetSourceRectangle();
 
-      //  Get viewport bounds adjusted for scaling
-      Rectangle viewportBounds = camera.GetViewportBounds(scaledGridSize);
-
-
-
-      foreach ((int, int) pos in _GridManager.Grids.Keys)
+      for (int i = 0; i < gridsDrawn; i++)
       {
+        if (_gridDrawQueue.Count == 0)
+        {
+          //DrawCycleActive = false;
+          break; // 🛑 Avoid errors if queue is empty
+        }
+
+
+        var pos = _gridDrawQueue.Dequeue(); // 🟢 Get next grid to draw
+        if (!_GridManager.Grids.ContainsKey(pos))
+          continue; // 🛑 Skip if grid no longer exists
+
         Grid grid = _GridManager.Grids[pos];
 
-        //  Compute **world position** correctly, applying scale
+        // 🟢 Compute world position of the grid (relative to device)
         Vector2 gridWorldPosition = new Vector2(
-            pos.Item1 * scaledGridSize,
-            pos.Item2 * scaledGridSize
+            (pos.Item1 * scaledGridSize) + devicePosition.X,
+            (pos.Item2 * scaledGridSize) + devicePosition.Y
         );
-
-        //  Ensure the grid is within the viewport bounds
+        grid.GridPosition = gridWorldPosition;
         Rectangle gridBounds = new Rectangle(
             (int)gridWorldPosition.X,
             (int)gridWorldPosition.Y,
@@ -98,86 +107,102 @@ namespace RPLIDAR_Mapping.Features.Map
             scaledGridSize
         );
 
-        if (!viewportBounds.Intersects(gridBounds))
+        // Skip if outside viewport
+        if (!sourceBounds.Intersects(gridBounds))
         {
-
-          continue;
+          continue; // Skip drawing this frame
         }
 
-        //  Compute **offset correctly**, applying scale factor
-        Vector2 gridOffset = new Vector2(
-            (_centerOfFullMap.X + (gridWorldPosition.X - devicePosition.X) * scaleFactor),
-            (_centerOfFullMap.Y + (gridWorldPosition.Y - devicePosition.Y) * scaleFactor)
-        );
+        // 🟢 Convert world position to screen space
+        Vector2 gridScreenPos = camera.WorldToScreen(gridWorldPosition);
 
+        // 🟢 Draw grid tiles
+        Vector2 deviceScreenPos = camera.WorldToScreen(devicePosition);
+        DrawTiles(_SpriteBatch, gridScreenPos, grid, deviceScreenPos);
 
-
-        //  Draw grid tiles
-        grid.DrawTiles(_SpriteBatch, gridOffset);
-
-        //  Draw the grid border using scaled values
-        Rectangle gridScreenRect = new Rectangle(
-            (int)Math.Round(gridOffset.X),
-            (int)Math.Round(gridOffset.Y),
-            scaledGridSize,
-            scaledGridSize
-        );
-
-        // ContentManagerProvider.DrawRectangleBorder(_SpriteBatch, gridScreenRect, 1, Color.White);
+        //  Debug visualization
+        //DrawingHelperFunctions.DrawRectangleBorder(_SpriteBatch, new Rectangle((int)gridScreenPos.X, (int)gridScreenPos.Y, 15, 15), 5, Color.Green);
       }
+      DrawCycleActive = _gridDrawQueue.Count > 0;
     }
 
+    
 
+    private void RefillGridQueue()
+{
+    _gridDrawQueue.Clear();
 
+    foreach (var gridKey in _GridManager.Grids.Keys)
+    {
+        _gridDrawQueue.Enqueue(gridKey);
+    }
 
+    _SpriteBatch.GraphicsDevice.Clear(Color.Black); //  Ensure screen resets when starting a new cycle
+}
+    public void DrawOverlays()
+    {
+      Camera camera = UtilityProvider.Camera;
+      Rectangle sourceBounds = camera.GetSourceRectangle();
+      Rectangle destBounds = camera.GetDestinationRectangle();
+      Vector2 devicePosition = _device._devicePosition;
+      Vector2 deviceScreenPos = _Camera.WorldToScreen(devicePosition);
+      _centerOfFullMap = destBounds.Center.ToVector2();
+      DrawingHelperFunctions.DrawGridPattern(_SpriteBatch, destBounds, deviceScreenPos, 2);
+      DrawingHelperFunctions.DrawRectangleBorder(_SpriteBatch, destBounds, 5, Color.White);
+      //DrawingHelperFunctions.DrawRectangleBorder(_SpriteBatch, sourceBounds, 5, Color.Red);
+      //DrawingHelperFunctions.DrawRectangleBorder(_SpriteBatch, viewPort, 5, Color.Blue);
 
+      
 
+      _SpriteBatch.DrawString(
+          ContentManagerProvider.GetFont("DebugFont"),
+          $"FPS: {UtilityProvider.FPSCounter.FPS}\nLiDAR Updates/s: {StatisticsProvider.MapStats.LiDARUpdatesPerSecond}",
+          new Vector2(10, 10),
+          Color.White
+      );
 
+      //  Draw device last (so it's always on top)
+      _SpriteBatch.Draw(
+          _device._deviceTexture,
+          _device.GetDeviceRectRelative(deviceScreenPos),
+          Color.Red
+      );
+    }
+    private int _framesSinceLastClear = 0; //  Count frames before clearing
 
     public void DrawMap()
     {
-
       Vector2 devicePosition = _device._devicePosition;
-
-      _GraphicsDevice.SetRenderTarget(_mapTexture);
-      _GraphicsDevice.Clear(Color.Transparent);
-
-
-      _SpriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp);
-
-      DrawGrids(devicePosition);
-
-      if (AppSettings.Default.DrawMergedTiles)
+      //  If the queue is empty but DrawCycleActive is still true, it means all grids were drawn last frame.
+      if (_gridDrawQueue.Count == 0 && DrawCycleActive)
       {
-        DrawMergedRectangles(devicePosition, _centerOfFullMap);
+        DrawCycleActive = false;
       }
-      //  Draw the device at the center of the screen
-      _SpriteBatch.Draw(
-          _device._deviceTexture,
-          _device.GetDeviceRectRelative(_centerOfFullMap),
-          Color.Red
-      );
 
-      //  Draw Map Border
-      DrawingHelperFunctions.DrawGridPattern(_SpriteBatch, _mapTexture, 2);
-      ContentManagerProvider.DrawRenderTargetBorder(_SpriteBatch, _mapTexture, 5, Color.White);
+      //  If the cycle is inactive, reset everything **only once**
+      if (!DrawCycleActive)
+      {
+        _GraphicsDevice.Clear(Color.Black);
+        DrawOverlays();
+        foreach (var gridKey in _GridManager.Grids.Keys)
+        {
+          if (_GridManager.Grids[gridKey] != null && _GridManager.Grids[gridKey]._drawnTiles.Count > 0)
+          {
+            _gridDrawQueue.Enqueue(gridKey);
+          }
+        }
+        DrawCycleActive = _gridDrawQueue.Count > 0; //  Start new cycle
+      }
 
-      //  Flush all queued lines in a single draw call
-      ContentManagerProvider.DrawQueuedLines(_SpriteBatch);
+      if (DrawCycleActive) DrawGrids(devicePosition, 100);
 
-      //_distanceOverlay.Draw();
-
-      _SpriteBatch.End();
-      _GraphicsDevice.SetRenderTarget(null);
     }
-
-
 
     private void DrawMergedRectangles(Vector2 devicePosition, Vector2 centerOfFullMap)
     {
       // IMPORTANT: set minsize here, do not look it up from settings in the if statement. Causes a huge drop in speed
-      int minSize = AppSettings.Default.MinMergedTileSize;
-      foreach (var (rect, angle, ispermanent) in _map._mergedObjects)
+      int minSize = _map._tileMerge.MinMergedTileSize;
+      foreach (var (rect, angle, ispermanent) in _map._tileMerge._mergedObjects)
       {
         if (rect.Width < minSize && rect.Height < minSize)
         {
@@ -203,12 +228,59 @@ namespace RPLIDAR_Mapping.Features.Map
         );
       }
     }
+    public void DrawTiles(SpriteBatch spriteBatch, Vector2 gridOffset, Grid grid, Vector2 devicePos)
+    {
+      Camera camera = UtilityProvider.Camera;
+      Rectangle sourceBounds = camera.GetSourceRectangle();
+
+      foreach (Tile tile in grid._drawnTiles.Values)
+      {
+        if (tile.TrustedScore < AlgorithmProvider.TileTrustRegulator.TileTrustTreshHold)
+        {
+          continue; //  Skip untrusted tiles
+        }
+
+        Vector2 worldPos = tile.WorldGlobalPosition;
+        Vector2 screenPos = camera.WorldToScreen(worldPos);
+        Rectangle tileBounds = tile.WorldRect;
+
+        if (!sourceBounds.Intersects(tileBounds))
+        {
+
+          continue;
+        }
+        tile.Draw(spriteBatch, screenPos, devicePos);
+      }
+    }
+
+    //public void DrawTiles(SpriteBatch spriteBatch, Vector2 gridOffset, Grid grid, Vector2 devicePos)
+    //{
+    //  Camera camera = UtilityProvider.Camera;
+    //  Rectangle sourceBounds = camera.GetSourceRectangle();
 
 
 
+    //  foreach (Tile tile in grid._drawnTiles.Values)
+    //  {
+    //    //  LOG: Check if tile passes trust threshold
+    //    if (tile.TrustedScore < AlgorithmProvider.TileTrustRegulator.TileTrustTreshHold)
+    //    {
+    //      continue;
+    //    }
 
+    //    //  Convert tile position to world space
+    //    Vector2 worldPos = tile.WorldGlobalPosition;
+    //    Vector2 screenPos = camera.WorldToScreen(worldPos);
+    //    Rectangle tileBounds = tile.WorldRect;
+    //    //  LOG: Check if tile is visible
+    //    if (!sourceBounds.Intersects(tileBounds))
+    //    {
+    //      continue;
+    //    }
 
-
+    //    tile.Draw(spriteBatch, screenPos, devicePos);
+    //  }
+    //}
 
 
 

@@ -319,6 +319,29 @@ namespace RPLIDAR_Mapping.Features.Communications
       return data.Count(c => c == ',') == 2 &&
              char.IsDigit(data[0]);
     }
+    public void Dispose()
+    {
+      try
+      {
+        if (_mqttClient != null)
+        {
+          if (_mqttClient.IsConnected)
+          {
+            _mqttClient.DisconnectAsync().Wait(); // Ensure proper disconnection
+            Debug.WriteLine("[Wireless] MQTT client disconnected in Dispose().");
+          }
+
+          _mqttClient.Dispose();
+          _mqttClient = null;
+          Debug.WriteLine("[Wireless] MQTT client disposed.");
+        }
+      }
+      catch (Exception ex)
+      {
+        Debug.WriteLine($"[Wireless] Error during Dispose(): {ex.Message}");
+      }
+    }
+
     void SendKeepAliveSignal()
     {
       if (IsConnected)

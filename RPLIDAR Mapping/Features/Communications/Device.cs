@@ -16,6 +16,7 @@ namespace RPLIDAR_Mapping.Features.Communications
   {
     private ICommunication _communication;
     public LidarSettings _LidarSettings;
+    public ConnectionParams _ConnectionParams;
     public GuiManager _GuiManager;
     private SerialPort _serialPort; //  Keep a direct reference to Serial
     private Thread _serialListenerThread; //  Background thread for Serial reading
@@ -27,9 +28,12 @@ namespace RPLIDAR_Mapping.Features.Communications
     private const int DeviceWidth = 20; 
     private const int DeviceHeight = 20;
 
-    public Device(string communicationType, ConnectionParams connectionParameters, GuiManager gm)
+    public Device(ConnectionParams connectionParameters, GuiManager gm)
     {
+      string communicationType = connectionParameters.ConnectionType;
+      _ConnectionParams = connectionParameters; 
       _GuiManager = gm;
+      _GuiManager.SetDevice(this);
       _devicePosition = new Vector2(0, 0);
       UpdateDeviceRect();
       _deviceTexture = new Texture2D(GraphicsDeviceProvider.GraphicsDevice, 1, 1);
@@ -75,16 +79,17 @@ namespace RPLIDAR_Mapping.Features.Communications
           DeviceHeight
       );
     }
-    public Rectangle GetDeviceRectRelative(Vector2 relativePos)
+    public Rectangle GetDeviceRectRelative(Vector2 screenPos)
     {
-      Rectangle rect = new Rectangle(
-          (int)(_devicePosition.X - DeviceWidth / 2) + (int)relativePos.X,  // Center X
-          (int)(_devicePosition.Y - DeviceHeight / 2) + (int)relativePos.Y, // Center Y
+      return new Rectangle(
+          (int)(screenPos.X - DeviceWidth / 2),  // Center the device at screenPos
+          (int)(screenPos.Y - DeviceHeight / 2),
           DeviceWidth,
           DeviceHeight
       );
-      return rect;
     }
+
+
     /// <summary>
     /// Updates the device position using the transformation from scan matching.
     /// </summary>
@@ -220,28 +225,14 @@ namespace RPLIDAR_Mapping.Features.Communications
 
     public void Dispose()
     {
-      if (_communication != null)
+      try
       {
-        _communication.OnMessageReceived -= _GuiManager.AddLogMessage;
+        _communication?.Dispose();
       }
-
-      if (_isListeningSerial)
+      catch (Exception ex)
       {
-        _isListeningSerial = false;
-        _serialListenerThread?.Join();
+        Debug.WriteLine($"[Device] Error in Dispose(): {ex.Message}");
       }
-
-      if (_serialPort != null && _serialPort.IsOpen)
-      {
-        _serialPort.Close();
-        _serialPort.Dispose();
-      }
-
-      if (IsConnected)
-      {
-        Send("P"); // Pause or stop the LiDAR
-      }
-      Disconnect();
     }
   }
   }

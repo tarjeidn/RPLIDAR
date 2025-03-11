@@ -8,18 +8,20 @@ namespace RPLIDAR_Mapping.Models
 {
   public class ConnectionParams
   {
-    public string WiFiSSID { get; private set; }
-    public string WiFiPW { get; private set; }
-    public string MQTTBrokerAddress { get; private set; }
-    public int MQTTPort { get; private set; }
-    public string SerialPort { get; set; }
-    public ConnectionParams(string serialPort = "", string wifiSSID ="", string wifiPW = "", string mqttBrokerAddress = "", int mqttPort = 1883)
+    public string ConnectionType { get; set; } = "";
+    public string WiFiSSID { get; set; } = "";
+    public string WiFiPW { get; set; } = "";
+    public string MQTTBrokerAddress { get; set; } = "";
+    public int MQTTPort { get; set; } = 1883;
+    public string SerialPort { get; set; } = "";
+    public ConnectionParams(string serialPort = "", string wifiSSID = "", string wifiPW = "", string mqttBrokerAddress = "", int mqttPort = 1883, string connectionType = "")
     {
       SerialPort = serialPort;
       WiFiSSID = wifiSSID;
       WiFiPW = wifiPW;
       MQTTBrokerAddress = mqttBrokerAddress;
       MQTTPort = mqttPort;
+      ConnectionType = connectionType;
     }
   }
 }

@@ -19,12 +19,14 @@ namespace RPLIDAR_Mapping.Features.Map.Statistics
     public int FrameUpdates {  get; set; }
     public int AddPointUpdates { get; set; }
     public int LiDARUpdatesPerSecond { get; set; }
+    public int UpdatesSincePointsAdded { get; set; }
 
     public MapStats()
     {
       TotalPointsHandledThisFrame = 0;
       FrameUpdates = 0;
       AddPointUpdates = 0;
+      UpdatesSincePointsAdded = 0;
     }
     public void AddToPointHistory(int count)
     {

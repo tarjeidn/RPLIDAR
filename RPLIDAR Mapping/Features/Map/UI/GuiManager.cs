@@ -1,38 +1,53 @@
-﻿using System;
-using System.Collections.Generic;
-using ImGuiNET;
+﻿using ImGuiNET;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using MonoGame.ImGuiNet;
-//using SharpDX;
-using System.Numerics;
-using System.Diagnostics;
-using System.IO;
 using RPLIDAR_Mapping.Features.Map;
-using RPLIDAR_Mapping.Utilities;
 using RPLIDAR_Mapping.Features.Map.Algorithms;
-using RPLIDAR_Mapping;
 using RPLIDAR_Mapping.Features.Map.UI;
+using RPLIDAR_Mapping.Utilities;
+using RPLIDAR_Mapping.Features.Communications;
+using System;
+using System.Collections.Generic;
+//using SharpDX;
+using System.Diagnostics;
+using RPLIDAR_Mapping.Models;
+using RPLIDAR_Mapping.Core;
 
 public class GuiManager
 {
   private List<string> _logMessages = new();
   private ImGuiRenderer _guiRenderer;
+  private GraphicsDevice _graphicsDevice;
+  private Device Device;
+  private ConnectionParams _tempConnectionParams;
+  private LidarSettings _tempLidarSettings;
+  private Mapplication _MainApplication;
+  private System.Numerics.Vector2 GuiSize;
+  private System.Numerics.Vector2 GuiPosition;
   private bool _showLogWindow = true;
   private List<string> _logBuffer;
-  public System.Numerics.Vector4 _colorV4;
   private ImFontPtr _loggerFont;
-  private Map _Map;
+  private float _fontScale = 2.0f;
   private TileTrustRegulator _tileTrustRegulator;
+  private TileMerge _tileMerge;
+  private int ScreenWidth;
+  private int ScreenHeight;
+  private bool _showLidarSettings = false;
 
-  public GuiManager(Game game, Map map)
-  {
-    _guiRenderer = new ImGuiRenderer(game);
+  public GuiManager(Mapplication mainapp)  {
+    _MainApplication = mainapp;
+    _guiRenderer = new ImGuiRenderer(mainapp);
+    _graphicsDevice = GraphicsDeviceProvider.GraphicsDevice;
     _tileTrustRegulator = AlgorithmProvider.TileTrustRegulator;
+    _tileMerge = AlgorithmProvider.TileMerge;
+    ScreenWidth = _graphicsDevice.Viewport.Width;
+    ScreenHeight = _graphicsDevice.Viewport.Height;
+    GuiSize = new System.Numerics.Vector2((int)(ScreenWidth * 0.3), (int)(ScreenHeight * 0.8));
+    GuiPosition = new System.Numerics.Vector2((int)(ScreenWidth * 0.66), (int)(ScreenHeight * 0.05));
     _guiRenderer.RebuildFontAtlas();
-    ImGui.GetIO().FontGlobalScale = 1.5f;
-    _colorV4 = Color.CornflowerBlue.ToVector4().ToNumerics();
-    ImGui.GetIO().DisplayFramebufferScale = new System.Numerics.Vector2(1.5f, 1.5f);
+    ImGui.GetIO().FontGlobalScale = _fontScale;
+    ImGui.GetIO().DisplayFramebufferScale = new System.Numerics.Vector2(_fontScale, _fontScale);
   }
 
   public void AddLogMessage(string message)
@@ -43,57 +58,129 @@ public class GuiManager
 
     _logMessages.Add($"[{DateTime.Now:HH:mm:ss}] {message}");
   }
+  public void SetDevice(Device device)
+  {
+    Device = device;
+    _tempConnectionParams = device._ConnectionParams;
+  }
+  public void DrawLidarSettingsWindow()
+  {
+    ImGui.SetNextWindowSize(new System.Numerics.Vector2(400, 400), ImGuiCond.FirstUseEver);
+    ImGui.Begin("LiDAR Settings", ref _showLidarSettings, ImGuiWindowFlags.AlwaysAutoResize);
 
-  //public void Update(GameTime gameTime)
-  //{
-  //  _guiRenderer.Update(gameTime);
-  //}
+    // LiDAR Configuration Section
+
+
+    ImGui.Separator(); // Adds a visual separator
+
+    // Use local variables for input fields
+    string serialPort = _tempConnectionParams.SerialPort;
+    string wifiSSID = _tempConnectionParams.WiFiSSID;
+    string wifiPassword = _tempConnectionParams.WiFiPW;
+    string mqttServer = _tempConnectionParams.MQTTBrokerAddress;
+    int mqttPort = _tempConnectionParams.MQTTPort;
+
+    // Device Connection Settings Section
+    ImGui.Text("Connection Parameters:");
+    if (ImGui.InputText("Serial Port", ref serialPort, 64))
+      _tempConnectionParams.SerialPort = serialPort;
+
+    if (ImGui.InputText("WiFi SSID", ref wifiSSID, 64))
+      _tempConnectionParams.WiFiSSID = wifiSSID;
+
+    if (ImGui.InputText("WiFi Password", ref wifiPassword, 64))
+      _tempConnectionParams.WiFiPW = wifiPassword;
+
+    if (ImGui.InputText("MQTT Server", ref mqttServer, 64))
+      _tempConnectionParams.MQTTBrokerAddress = mqttServer;
+
+    if (ImGui.InputInt("MQTT Port", ref mqttPort))
+      _tempConnectionParams.MQTTPort = mqttPort;
+
+    ImGui.Separator();
+
+    // Apply Button
+    if (ImGui.Button("Apply Settings"))
+    {
+      ApplyLidarSettings();
+    }
+
+    ImGui.End();
+  }
+
+  // Function to Apply Settings
+  private void ApplyLidarSettings()
+  {
+    // Send updated settings to the LiDAR
+    Device.UpdateLidarSettings(_tempLidarSettings);
+
+    // Update Connection Parameters
+    Device = new Device(_tempConnectionParams, this);
+
+    // Optionally, log the update
+    Console.WriteLine("Updated LiDAR settings: " + _tempLidarSettings.ToJson());
+    _MainApplication.ReloadDevice(Device);
+  }
 
   public void Draw(GameTime gametime)
   {
     _guiRenderer.BeginLayout(gametime);
 
-    if (_showLogWindow)
-      DrawMainWindow();
-
+    if (_showLogWindow )
+    {
+      if (Device.IsInitialized) DrawMainWindow();
+      else
+      {
+        _showLidarSettings = true;
+        DrawLidarSettingsWindow();
+      }
+    }
     _guiRenderer.EndLayout();
   }
   private void DrawMainWindow()
   {
-    ImGui.SetNextWindowSize(new System.Numerics.Vector2(800, 600), ImGuiCond.FirstUseEver);
-    ImGui.Begin("Main Window", ref _showLogWindow, ImGuiWindowFlags.MenuBar);
+    ImGui.SetNextWindowPos(
+      GuiPosition,
+      ImGuiCond.Always
+      );
+    ImGui.SetNextWindowSize(
+      GuiSize,
+      ImGuiCond.Always
+      );
+    // Remove decorations
+    ImGuiWindowFlags windowFlags = ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoResize | ImGuiWindowFlags.NoMove;
 
+    //ImGui.Begin("Main Window", ref _showLogWindow, ImGuiWindowFlags.MenuBar);
+    ImGui.Begin("Main Window", ref _showLogWindow, windowFlags);
 
-    if (ImGui.BeginMenuBar())
-    {
-      if (ImGui.BeginMenu("File"))
-      {
-        if (ImGui.MenuItem("Open..", "Ctrl+O")) { /* Do stuff */ }
-        if (ImGui.MenuItem("Save", "Ctrl+S")) { /* Do stuff */ }
-        if (ImGui.MenuItem("Close", "Ctrl+W")) { _showLogWindow = false; }
-        ImGui.EndMenu();
-      }
-      ImGui.EndMenuBar();
-    }
-    float zoom = AppSettings.Default.MapZoom;
+    float zoom = MapScaleManager.Instance.MapZoomFactor;
     float gridScaleFactor = MapScaleManager.Instance.ScaleFactor;
-    if (ImGui.SliderFloat("Grid Scale", ref gridScaleFactor, 0.1f, 4.0f, "%.2f"))
+    float minPointDistance = _tileMerge.MinPointDistance;
+    int minPointQuality = _tileMerge.MinPointQuality;
+
+
+    if (ImGui.SliderFloat("Grid Scale", ref gridScaleFactor, 0.1f, 8.0f, "%.2f"))
       MapScaleManager.Instance.SetScaleFactor(gridScaleFactor);
-
-
-
     if (ImGui.SliderFloat("Zoom", ref zoom, 0.05f, 1))
-      AppSettings.Default.MapZoom = zoom;
-    //  Begin Tab Bar
+      MapScaleManager.Instance.SetMapZoomFactor(zoom);
+    if (ImGui.SliderInt("Minimum point quality", ref minPointQuality, 0, 10))
+      _tileMerge.MinPointQuality = minPointQuality;
+    if (ImGui.SliderFloat("MinimumPointDistance", ref minPointDistance, 0, 200))
+      _tileMerge.MinPointDistance = minPointDistance;
+    if (ImGui.SliderFloat("Font Scale", ref _fontScale, 0.5f, 4.0f, "%.2f"))
+    {
+      ImGui.GetIO().FontGlobalScale = _fontScale;
+      ImGui.GetIO().DisplayFramebufferScale = new System.Numerics.Vector2(_fontScale, _fontScale);
+    }
+
+    //  Begin Tabs
     if (ImGui.BeginTabBar("MainTabs"))
     {
       //  Tab: Log Monitor
       if (ImGui.BeginTabItem("Log Monitor"))
       {
         DrawLogWindow();
-
       }
-
       //  Tab: Statistics
       if (ImGui.BeginTabItem("Statistics"))
       {
@@ -104,11 +191,23 @@ public class GuiManager
       if (ImGui.BeginTabItem("Regulator Settings"))
       {
         DrawTileRegulatorSettings();
+        DrawTileRegulatorSettings();
+      }
+      if (ImGui.BeginTabItem("Map scale Settings"))
+      {
+        DrawScalingSettings();
       }
 
-        ImGui.EndTabBar();
+      ImGui.EndTabBar();
     }
-
+    if (ImGui.Button("Start LiDAR"))
+    {
+      Device.Send("s");
+    }
+    if (ImGui.Button("Stop LiDAR"))
+    {
+      Device.Send("p"); // Example: Replace with the correct stop command
+    }
     ImGui.End();
   }
 
@@ -146,7 +245,7 @@ public class GuiManager
     ImGui.Text($"LiDAR Updates Per Second: {StatisticsProvider.MapStats.PointsPerSecond}");
     ImGui.Text($"Data Batch Size: {StatisticsProvider.MapStats.CurrentPacketSize}");
 
-    ImGui.Separator(); // 🔹 Visual break
+    ImGui.Separator(); //  Visual break
 
     //  Graph for points handled per frame
     var samples = StatisticsProvider.MapStats._pointHistory.ToArray();
@@ -156,7 +255,7 @@ public class GuiManager
       ImGui.PlotLines("Points Handled Per Frame", ref floatSamples[0], floatSamples.Length);
     }
 
-    ImGui.Separator(); // 🔹 Visual break
+    ImGui.Separator(); //  Visual break
 
     //  Updated Grid Statistics
     var gridStats = StatisticsProvider.GridStats;
@@ -165,7 +264,7 @@ public class GuiManager
     ImGui.Text($"Total Active Tiles: {gridStats.TotalHitTiles}");
     ImGui.Text($"Total Points Processed: {gridStats.TotalPointsHandled}");
 
-    ImGui.Separator(); // 🔹 Tile statistics
+    ImGui.Separator(); //  Tile statistics
 
     ImGui.Text($"Highest Hits on a Single Tile: {gridStats.HighestTileHitCount}");
     ImGui.Text($"Average Tile Hit Count: {gridStats.AverageTileHitCount}");
@@ -183,55 +282,90 @@ public class GuiManager
     ImGui.Text($"Current Tile Count: {StatisticsProvider.GridStats.TotalHitTiles}");
     ImGui.Text($"Points Per Second: {StatisticsProvider.MapStats.PointsPerSecond}");
 
-    //  Sliders show real-time values from AppSettings
-    bool regulatorEnabled = TileRegulatorSettings.Default.RegulatorEnabled;
-    bool drawMergedTiles = AppSettings.Default.DrawMergedTiles;
-    float trustIncrement = AppSettings.Default.TileTrustIncrement;
-    float trustDecrement = AppSettings.Default.TileTrustDecrement;
-    float tileMergeTreshold = AppSettings.Default.TilemergeThreshold;
-    int decayFrequency = AppSettings.Default.TileDecayRate;
-    int trustThreshold = AppSettings.Default.TileTrustThreshold;
-    int mergeFrequency = AppSettings.Default.MergeTilesFrequency;
-    int minmergedTileSize = AppSettings.Default.MinMergedTileSize;
 
 
-    //  Sliders allow manual adjustments (values are updated in AppSettings)
+    //  Read values from the regulator
+    bool regulatorEnabled = _tileTrustRegulator.RegulatorEnabled;
+    bool drawMergedTiles = _tileMerge.DrawMergedTiles;
+    float trustIncrement = _tileTrustRegulator.TrustIncrement;
+    float trustDecrement = _tileTrustRegulator.TrustDecrement;
+    float tileMergeThreshold = _tileMerge.TileMergeThreshold;
+    int decayFrequency = _tileTrustRegulator.DecayFrequency;
+    int trustThreshold = _tileTrustRegulator.TrustThreshold;
+    int mergeFrequency = _tileMerge.MergeFrequency;
+    int minMergedTileSize = _tileMerge.MinMergedTileSize;
+
+    //  Sliders allow manual adjustments (values are updated in TileTrustRegulator)
     if (ImGui.Checkbox("Draw merged tiles", ref drawMergedTiles))
     {
-      AppSettings.Default.DrawMergedTiles = drawMergedTiles;
+      _tileMerge.DrawMergedTiles = drawMergedTiles;
     }
-    if (ImGui.SliderInt("Minimum merged til size (pixels)", ref minmergedTileSize, 0, 100))
-      AppSettings.Default.MinMergedTileSize = minmergedTileSize;
+
+    if (ImGui.SliderInt("Minimum merged tile size (pixels)", ref minMergedTileSize, 0, 100))
+    {
+      _tileMerge.MinMergedTileSize = minMergedTileSize;
+    }
 
     if (ImGui.SliderInt("Tile merge frequency (updates)", ref mergeFrequency, 0, 100))
-      AppSettings.Default.MergeTilesFrequency = mergeFrequency;
-
-    if (ImGui.SliderFloat("Tile merge treshold (pixels)", ref tileMergeTreshold, 0 , 100))
-      AppSettings.Default.TilemergeThreshold = tileMergeTreshold;
-    
-    //regulator section
-    if (ImGui.Checkbox("Enable Regulator", ref regulatorEnabled))
     {
-      TileRegulatorSettings.Default.RegulatorEnabled = regulatorEnabled;
+      _tileMerge.MergeFrequency = mergeFrequency;
     }
 
-    if (ImGui.SliderFloat("Tile Trust Increment", ref trustIncrement, 0.1f, TileRegulatorSettings.Default.MaxTileTrustIncrement, "%.2f"))
-      AppSettings.Default.TileTrustIncrement = trustIncrement;
+    if (ImGui.SliderFloat("Tile merge threshold (pixels)", ref tileMergeThreshold, 0, 100))
+    {
+      _tileMerge.TileMergeThreshold = tileMergeThreshold;
+    }
 
-    if (ImGui.SliderFloat("Tile Trust Decrement", ref trustDecrement, 0.1f, TileRegulatorSettings.Default.MaxTileTrustDecrement, "%.2f"))
-      AppSettings.Default.TileTrustDecrement = trustDecrement;
+    //  Regulator section
+    if (ImGui.Checkbox("Enable Regulator", ref regulatorEnabled))
+    {
+      _tileTrustRegulator.RegulatorEnabled = regulatorEnabled;
+    }
 
-    if (ImGui.SliderInt("Decay Frequency (updates)", ref decayFrequency, 1, TileRegulatorSettings.Default.MaxTileDecayRate))
-      AppSettings.Default.TileDecayRate = decayFrequency;
+    if (ImGui.SliderFloat("Tile Trust Increment", ref trustIncrement, 0.0f, 100, "%.2f")) // 100 is a placeholder max value
+    {
+      _tileTrustRegulator.TrustIncrement = trustIncrement;
+    }
 
-    if (ImGui.SliderInt("Trust Threshold for Drawing", ref trustThreshold, TileRegulatorSettings.Default.MinTileTrustThreshold, TileRegulatorSettings.Default.MaxTileTrustThreshold))
-      AppSettings.Default.TileTrustThreshold = trustThreshold;
+    if (ImGui.SliderFloat("Tile Trust Decrement", ref trustDecrement, 0.0f, 100, "%.2f")) // 100 is a placeholder max value
+    {
+      _tileTrustRegulator.TrustDecrement = trustDecrement;
+    }
+
+    if (ImGui.SliderInt("Decay Frequency (updates)", ref decayFrequency, 0, 100)) // 100 is a placeholder max value
+    {
+      _tileTrustRegulator.DecayFrequency = decayFrequency;
+    }
+
+    if (ImGui.SliderInt("Trust Threshold for Drawing", ref trustThreshold, 0, 100)) // 0-100 as example range
+    {
+      _tileTrustRegulator.TrustThreshold = trustThreshold;
+    }
+
+    ImGui.EndTabItem();
+
+  }
+  private void DrawScalingSettings()
+  {
+
+
+
+
+    float gridAreaMeters = AppSettings.Default.TileTrustIncrement;
+
+    if (ImGui.SliderFloat("Grid size (meters)", ref gridAreaMeters, 0.1f, 5.0f, "%.2f"))
+      MapScaleManager.Instance.SetGridAreaMeters(gridAreaMeters);
+
+    ImGui.Text($"Tile pixel size: {MapScaleManager.Instance.ScaledTileSizePixels}");
 
     ImGui.EndTabItem();
   }
 
 
 }
+
+
+
 
 
 

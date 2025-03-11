@@ -58,7 +58,6 @@ namespace RPLIDAR_Mapping.Utilities
 
     private void HandleKeyPress(string key)
     {
-      Debug.WriteLine(_device.IsConnected);
       if (_device.IsConnected)
       {
 

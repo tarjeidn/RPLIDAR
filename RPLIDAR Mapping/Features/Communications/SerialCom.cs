@@ -178,9 +178,22 @@ namespace RPLIDAR_Mapping.Features.Communications
 
     public void Disconnect()
     {
-      if (_serialPort.IsOpen)
+      try
       {
-        _serialPort.Close();
+        if (_serialPort != null)
+        {
+          if (_serialPort.IsOpen)
+          {
+            _serialPort.Close();
+            Debug.WriteLine("[SerialCom] Serial port closed.");
+          }
+          _serialPort.Dispose();
+          _serialPort = null;
+        }
+      }
+      catch (Exception ex)
+      {
+        Debug.WriteLine($"[SerialCom] Error during Disconnect(): {ex.Message}");
       }
     }
 
@@ -415,18 +428,29 @@ namespace RPLIDAR_Mapping.Features.Communications
     }
     public void Dispose()
     {
-      if (_serialPort != null)
+      try
       {
-        if (_serialPort.IsOpen)
+        if (_serialPort != null)
         {
-          _serialPort.Close();
+          if (_serialPort.IsOpen)
+          {
+            _serialPort.Close();
+            Debug.WriteLine("[SerialCom] Serial port closed in Dispose().");
+          }
+          _serialPort.Dispose();
+          _serialPort = null;
         }
-        _serialPort.Dispose();
+      }
+      catch (Exception ex)
+      {
+        Debug.WriteLine($"[SerialCom] Error during Dispose(): {ex.Message}");
       }
     }
-  }
-
-
 
 
   }
+
+
+
+
+}

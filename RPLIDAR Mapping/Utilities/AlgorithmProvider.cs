@@ -12,10 +12,12 @@ namespace RPLIDAR_Mapping.Utilities
   public static class AlgorithmProvider
   {
 
-    public static TileTrustRegulator TileTrustRegulator { get; set; }
+    public static TileTrustRegulator TileTrustRegulator { get; private set; }
+    public static TileMerge TileMerge { get; private set; }
     public static void Initialize()
     {
       TileTrustRegulator = new TileTrustRegulator();
+      TileMerge = new TileMerge();
     }
   }
 }

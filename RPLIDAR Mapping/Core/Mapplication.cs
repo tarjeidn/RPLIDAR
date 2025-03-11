@@ -15,9 +15,11 @@ using RPLIDAR_Mapping.Utilities;
 
 
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 
 //using System.Windows.Forms;
@@ -46,6 +48,7 @@ namespace RPLIDAR_Mapping.Core
     private Rectangle _view;
     private float _mapScale = 1.0f;
     private Vector2 _mapDrawingPosition = new Vector2(100, 100);
+    private bool MapUpdated = false;
 
 
 
@@ -55,9 +58,8 @@ namespace RPLIDAR_Mapping.Core
 
       _graphics = new GraphicsDeviceManager(this);
       _graphics.IsFullScreen = false;
-      _graphics.PreferredBackBufferWidth = AppSettings.Default.WindowWidth;
-      _graphics.PreferredBackBufferHeight = AppSettings.Default.WindowHeight;
-
+      _graphics.PreferredBackBufferWidth = GraphicsAdapter.DefaultAdapter.CurrentDisplayMode.Width;
+      _graphics.PreferredBackBufferHeight = GraphicsAdapter.DefaultAdapter.CurrentDisplayMode.Height;
 
       Content.RootDirectory = "Content";
       IsMouseVisible = true;
@@ -66,41 +68,57 @@ namespace RPLIDAR_Mapping.Core
       _graphics.SynchronizeWithVerticalRetrace = false; // Disable VSync
 
     }
-
     protected override void Initialize()
     {
+      AppDomain.CurrentDomain.ProcessExit += (s, e) => DisposeDevice();
+      AppDomain.CurrentDomain.UnhandledException += (s, e) => DisposeDevice();
       AlgorithmProvider.Initialize();
-      
       GraphicsDeviceProvider.Initialize(GraphicsDevice, UtilityProvider.FPSCounter);
       UtilityProvider.Initialize(GraphicsDeviceProvider.GraphicsDevice);
       ContentManagerProvider.Initialize(Content);
+
       _camera = UtilityProvider.Camera;
-      _guiManager = new GuiManager(this, _map);
+
       _fpsCounter = UtilityProvider.FPSCounter;
       _GraphicsDevice = GraphicsDeviceProvider.GraphicsDevice;
-      // TODO: Add your initialization logic here
-      // Initialize the communication via the Device class
-      //_device = new Device("serial", "COM4");
-      
       _connectionParams = new ConnectionParams(
         AppSettings.Default.SerialPort,
         AppSettings.Default.WiFiSSID,
         AppSettings.Default.WiFiPassword,
         AppSettings.Default.mqttServer,
-        AppSettings.Default.mqttPort
+        AppSettings.Default.mqttPort,
+        AppSettings.Default.CommunicationProtocol
         );
 
       _LidarSettings = new LidarSettings();
       _LidarSettings.BatchSize = AppSettings.Default.LIDARDataBatchSize;
 
       // Apply resizing setting
-      Window.AllowUserResizing =AppSettings.Default.AllowResizing;
+      Window.AllowUserResizing = AppSettings.Default.AllowResizing;
       _graphics.ApplyChanges();
-      _device = new Device(AppSettings.Default.CommunicationProtocol, _connectionParams, _guiManager);
 
-      _inputManager = new InputManager(_device);
+
+
+
 
       // Start device initialization in a background task
+
+
+
+      base.Initialize();
+    }
+    protected override void LoadContent()
+    {
+      ContentManagerProvider.LoadFont("DebugFont", "Fonts/Debug");
+      _guiManager = new GuiManager(this);
+      _device = new Device(_connectionParams, _guiManager);
+      _inputManager = new InputManager(_device);
+      _spriteBatch = GraphicsDeviceProvider.SpriteBatch;
+      _map = new Map(_device);
+      _mapRenderer = new MapRenderer(_map);
+      _mapRenderer._device = _device;
+
+      StatisticsProvider.Initialize(_map.GetDistributor()._GridManager.GridStats, _map._MapStats);
       Task.Run(() =>
       {
         while (!_device.IsInitialized)
@@ -112,54 +130,40 @@ namespace RPLIDAR_Mapping.Core
         Log("Device initialized!");
         _device.UpdateLidarSettings(_LidarSettings);
       });
-
-
-      base.Initialize();
-    }
-
-    protected override void LoadContent()
-    {
-      ContentManagerProvider.LoadFont("DebugFont", "Fonts/Debug");
-      _spriteBatch = GraphicsDeviceProvider.SpriteBatch;
-      _map = new Map();
-      _map._device = _device;
-      _mapRenderer = new MapRenderer(_map);
-      _mapRenderer._device = _device;
-      StatisticsProvider.Initialize(_map.GetDistributor()._GridManager.GridStats, _map._MapStats);
     }
 
     protected override void Update(GameTime gameTime)
     {
       try
-        {
-
+      {
         _fpsCounter.Update(gameTime);
+
         if (!_device.IsInitialized)
         {
-
-          return; // Skip update logic until the device is ready
+          return;
         }
+
         if (!_device.IsConnected)
         {
           Log($"No connection to {_connectionParams.SerialPort}");
           _device.Connect();
         }
+
         if (GamePad.GetState(PlayerIndex.One).Buttons.Back == ButtonState.Pressed || Keyboard.GetState().IsKeyDown(Keys.Escape))
           Exit();
-        float deltaTime = (float)gameTime.ElapsedGameTime.TotalSeconds; // Get time since last frame
+
+        float deltaTime = (float)gameTime.ElapsedGameTime.TotalSeconds;
 
         _inputManager.Update(gameTime);
 
-        _camera.SetZoom(AppSettings.Default.MapZoom);
-        //  Get the device's relative position on _mapTexture
-        Vector2 centerOfFullMap = new Vector2(_mapRenderer._mapTexture.Width / 2, _mapRenderer._mapTexture.Height / 2);
-        Rectangle deviceRect = _device.GetDeviceRectRelative(centerOfFullMap);
-        Vector2 deviceRelativePosition = new Vector2(deviceRect.X + deviceRect.Width / 2, deviceRect.Y + deviceRect.Height / 2);
-        _camera.CenterOn(deviceRelativePosition);  //  Center on the correct relative position
+
+        UtilityProvider.Camera.CenterOn(_device._devicePosition);
 
         // Process LiDAR data
-        var lidarDataList = _device.GetData();        
-        _map.Update(lidarDataList, deltaTime);
+        List<DataPoint> lidarDataList = _device.GetData();
+
+        MapUpdated = _map.Update(lidarDataList, deltaTime);
+
 
         base.Update(gameTime);
       }
@@ -169,38 +173,25 @@ namespace RPLIDAR_Mapping.Core
       }
     }
 
-protected override void Draw(GameTime gameTime)
-{
-    _GraphicsDevice.Clear(Color.Black);
 
-      //  Get the corrected source rectangle from Camera
-      //Rectangle sourceRect = _camera.GetSourceRectangle();
-      Rectangle destRect = _camera.GetDestinationRectangle();
-      Rectangle sourceRect = _camera.GetSourceRectangle();
 
-      _mapRenderer.DrawMap();
-      _spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp);
+    protected override void Draw(GameTime gameTime)
+    {
+      if (_map == null) return;
+      // 
+      if (MapUpdated || _mapRenderer.DrawCycleActive) 
+      { 
+        _spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp, null, null);
+        _mapRenderer.DrawMap();
+        _spriteBatch.End();
+      }
+      _guiManager.Draw(gameTime);
+      base.Draw(gameTime);
 
-    _spriteBatch.Draw(
-        _mapRenderer._mapTexture,
-        destRect,
-        sourceRect,
-        Color.White
-    );
 
-    _spriteBatch.DrawString(
-        ContentManagerProvider.GetFont("DebugFont"),
-        $"FPS: {_fpsCounter.FPS}\nLiDAR Updates/s: {StatisticsProvider.MapStats.LiDARUpdatesPerSecond}",
-        new Vector2(10, 10),
-        Color.White
-    );
-
-    _spriteBatch.End();
+    }
     
 
-    base.Draw(gameTime);
-    _guiManager.Draw(gameTime);
-}
 
 
 
@@ -214,8 +205,15 @@ protected override void Draw(GameTime gameTime)
     {
       try
       {
-        _device?.Dispose();
-        Log("LiDAR stopped and device disposed.");
+        if (_device != null)
+        {
+          _device.Send("P"); // 🔴 Send stop command before disposal
+          Log("Sent STOP command to LiDAR.");
+          Thread.Sleep(500); // Small delay to ensure command is sent
+
+          _device.Dispose();
+          Log("LiDAR stopped and device disposed.");
+        }
       }
       catch (Exception ex)
       {
@@ -236,6 +234,40 @@ protected override void Draw(GameTime gameTime)
         DisposeDevice();
       }
       base.Dispose(disposing);
+    }
+    public void ReloadDevice(Device newDevice)
+    {
+      // Dispose of the old device
+      if (_device != null)
+      {
+        _device.Dispose();
+        _device = null;
+      }
+
+      // Reinitialize the device and dependencies
+      _device = newDevice;
+      _inputManager = new InputManager(newDevice);
+      _map = new Map(newDevice);
+      _mapRenderer = new MapRenderer(_map);
+      _mapRenderer._device = newDevice;
+
+      // Reinitialize statistics provider
+      StatisticsProvider.Initialize(_map.GetDistributor()._GridManager.GridStats, _map._MapStats);
+
+      // Start device initialization
+      Task.Run(() =>
+      {
+        while (!_device.IsInitialized)
+        {
+          Log("Waiting for device to initialize...");
+          System.Threading.Thread.Sleep(1000);
+        }
+
+        Log("Device initialized!");
+        _device.UpdateLidarSettings(_LidarSettings);
+      });
+
+      Console.WriteLine("Device and dependent components reloaded successfully!");
     }
 
 

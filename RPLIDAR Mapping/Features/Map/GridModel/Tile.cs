@@ -24,17 +24,19 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
     public bool IsPermanent { get; private set; }
     public Grid _selfGrid { get; private set; }
     public bool IsTrusted { get;  set; }
-    public Color Color { get; }
-    private Texture2D _GridLineTexture { get; set; }
+
     private Texture2D _TileTexture { get; set; }
-    public Rectangle tileRect { get; private set; }
+    public Rectangle WorldRect { get; private set; }
+    public Rectangle ScreenRect { get; private set; }
     public Vector2 Position { get; set; }
     public Vector2 GlobalCenter { get; set; }
-    public MapPoint _representativeMapPoint { get; private set; }
+    public Vector2 WorldGlobalPosition { get; set; }
+
+
     public MapPoint _lastLIDARpoint { get; set; }
     private readonly SpriteBatch _SpriteBatch;
     public int _tileSize {  get; set; }
-    private int _ScaledTileSize { get; set; }
+
     public int TrustDurationCounter { get; private set; }
     public float TrustedScore { get; set; }
     public int AmountofDecays { get; set; }
@@ -59,12 +61,15 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
       Vector2 gridGlobalPosition = _selfGrid.GridPosition;
       //  Get the tile's position relative to the grid
       Position = new Vector2(X * _tileSize, Y * _tileSize);
+      WorldGlobalPosition = gridGlobalPosition + Position;
+      
+
       //  Correctly calculate GlobalCenter (adjusted for grid position)
       GlobalCenter = gridGlobalPosition + Position + new Vector2(_tileSize / 2.0f, _tileSize / 2.0f);
-      tileRect = new Rectangle((int)Position.X, (int)Position.Y, _tileSize, _tileSize);
+      WorldRect = new Rectangle((int)WorldGlobalPosition.X, (int)WorldGlobalPosition.Y, _tileSize, _tileSize);
       //  Graphics setup
       _SpriteBatch = GraphicsDeviceProvider.SpriteBatch;
-      _GridLineTexture = ResizeTexture(ContentManagerProvider.GetTexture("Sprites/Utility/gridline10orange"), _tileSize, _tileSize);
+
       _TileTexture = ContentManagerProvider.GetTexture("tiletexture");
       TTR = AlgorithmProvider.TileTrustRegulator;
     }
@@ -86,12 +91,18 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
         IsPermanent = true;
       }
     }
+    public Vector2 GetGlobalCenter()
+    {
+      //  Ensure the tile position updates correctly
+      Vector2 gridGlobalPosition = _selfGrid.GridPosition;
+      Vector2 tileLocalPosition = new Vector2(X * MapScaleManager.Instance.ScaledTileSizePixels, Y * MapScaleManager.Instance.ScaledTileSizePixels);
 
+      return gridGlobalPosition + tileLocalPosition + new Vector2(MapScaleManager.Instance.ScaledTileSizePixels / 2.0f, MapScaleManager.Instance.ScaledTileSizePixels / 2.0f);
+    }
 
-    public void Draw(SpriteBatch spriteBatch, Vector2 drawPosition)
+    public void Draw(SpriteBatch spriteBatch, Vector2 screenPos, Vector2 decivePos)
     {
       const float TrustDropBuffer = 5;
-
       if (IsDrawn)
       {
         if (TrustedScore < TTR.TileTrustTreshHold - TrustDropBuffer)
@@ -122,24 +133,28 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
       }
 
       Color tileColor = Color.Lerp(Color.Blue, Color.Red, intensity);
-
-      // 🔥 Ensure proper tile scaling
+      if (ScreenRect == Rectangle.Empty)
+      {
+        ScreenRect = new Rectangle((int)screenPos.X, (int)screenPos.Y, _tileSize, _tileSize);
+      }
+      // Ensure proper tile scaling
       int tileSize = MapScaleManager.Instance.ScaledTileSizePixels;
-
+      // Draw red Sightline from tile using LiDAR Angle
+      if (_lastLIDARpoint != null)
+      {
+        Rectangle destRect = UtilityProvider.Camera.GetDestinationRectangle();
+        Vector2 sightEnd = DrawingHelperFunctions.GetScreenBorderIntersection(screenPos, destRect,  _lastLIDARpoint.Radians);
+        DrawingHelperFunctions.DrawLine(spriteBatch, screenPos, sightEnd, Color.Red, 2, 0.1f);
+      }
+      // draw green sightlines from device
+      DrawingHelperFunctions.DrawLine(spriteBatch, decivePos, screenPos, Color.Green, 2, 0.1f);
       spriteBatch.Draw(
           _TileTexture,
-          new Rectangle((int)drawPosition.X, (int)drawPosition.Y, tileSize, tileSize),
+          ScreenRect,
           tileColor
       );
+
     }
-
-
-
-
-
-
-
-
 
     private Texture2D ResizeTexture(Texture2D texture, int width, int height)
     {

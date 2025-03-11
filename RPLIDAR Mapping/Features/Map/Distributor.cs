@@ -16,9 +16,9 @@ namespace RPLIDAR_Mapping.Features.Map
     { 
       _GridManager = new GridManager(map);
     }
-    public void Update()
+    public bool Update()
     {
-      _GridManager.Update();
+      return _GridManager.Update();
     }
     public void Distribute(List<MapPoint> points)
     {

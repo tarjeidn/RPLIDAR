@@ -30,6 +30,7 @@ namespace RPLIDAR_Mapping.Features.Map.Statistics
     // Tracking points & unique tiles per batch
     public int TotalPointsAddedLastBatch { get; private set; }
     public int UniqueTilesHitLastBatch { get; private set; }  //  Unique tiles hit in last cycle
+    public int HighTrustTilesLostLastCycle { get;  set; }
 
     private HashSet<(int, int)> _uniqueTileTracker;  // Tracks unique tiles hit per batch
 
@@ -85,7 +86,7 @@ namespace RPLIDAR_Mapping.Features.Map.Statistics
 
       TotalGrids = _gridManager.Grids.Count;
       TotalPointsHandled += StatisticsProvider.MapStats.PointsPerSecond;
-
+      HighTrustTilesLostLastCycle = 0;
       if (_gridManager.Grids.Count == 0)
       {
         Reset();
