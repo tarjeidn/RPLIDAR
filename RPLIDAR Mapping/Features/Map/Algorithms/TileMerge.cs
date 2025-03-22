@@ -7,130 +7,613 @@ using System.Threading.Tasks;
 
 using RPLIDAR_Mapping.Features;
 using RPLIDAR_Mapping.Features.Map.GridModel;
-using SharpDX.Direct3D9;
+using System.Diagnostics;
+using RPLIDAR_Mapping.Features.Communications;
+using RPLIDAR_Mapping.Providers;
+using RPLIDAR_Mapping.Features.Map.UI;
+using RPLIDAR_Mapping.Models;
+
 
 namespace RPLIDAR_Mapping.Features.Map.Algorithms
 {
   public class TileMerge
   {
 
-    public List<(Rectangle, float, bool)> _mergedObjects {  get; private set; }
+    public List<(Rectangle, float, bool)> _mergedRectangles { get; private set; } = new();
+    public List<LineSegment> _mergedLines { get; set; } = new();
+    //public List<(Vector2 Start, Vector2 End, float AngleDegrees, float AngleRadians,  bool IsPermanent)> _mergedLines { get; set; } = new();
+    public List<(Vector2 Start, Vector2 End, float AngleDegrees, float AngleRadians, bool IsPermanent)> _inferredLines { get; private set; } = new();
+    public List<(Vector2 Start, Vector2 End, float AngleDegrees, float AngleRadians, bool IsPermanent)> _previousMergedLines { get; private set; } = new();
+    public List<Rectangle> ClusterBoundingRectangles { get; private set; } = new();
+    public List<TileCluster> TileClusters = new();
+    public List<TileCluster> PreviousTileClusters = new();
+    public Map _map { get; set; }
     public int MergeFrequency = 20;
     public int MinMergedTileSize = 50;
+    public int mergeTileRadius = 3;
+    public int MinTileClusterSize = 10;
+    public int MinLargeFeaturesLineLength = 100;
     public float TileMergeThreshold = 50;
+    public bool ComputeMergedTiles = true;
+    public bool ComputeMergedLines = true;
+    public bool ComputeMergedRectangles = false;
     public bool DrawMergedTiles = false;
-
+    public bool DrawMergedLines = true;
+    private int MergeTilesFrameCounter = 0;
+    public float PointClusterMergeDistance = 200f;
+    private int _tileSize;
     public int MinPointQuality = 0;
     public float MinPointDistance = 0;
+    public bool IsUpdated = false;
+    private bool TilesMerged = false;
+    public bool LinesDetected = false;
+
+    private HashSet<Tile> _trustedTiles;
+    private Dictionary<Vector2, HashSet<Tile>> clusterLookup = new();
+
+    private Dictionary<(int, int), Tile> TileLookup = new();
+
+    public Vector2 _estimatedPosition { get; private set; } = Vector2.Zero;
+
+    public Device _device { get; set; }
+    public MergeState CurrentState { get; set; } = MergeState.Idle;
+    public enum MergeState
+    {
+      Idle,              // Waiting, nothing computed yet
+      NewPointsAdded,
+      ComputingTiles,    // Merging tiles
+      UpdatingClusters,
+      ComputingLines,    // Detecting lines from merged tiles
+      ComputingRects,    // Merging rectangles from lines
+      RecalculatingPosition,
+      ReadyToDraw        // All computations complete, ready to render
+    }
 
     public TileMerge() 
-    { 
+    {
+
 
     }
-    public void ClearMergedObjects()
-    {
-      _mergedObjects.Clear();
-    }
-    public void MergeTilesGlobal(float mergeThreshold, List<Tile> drawnTiles)
-    {
-      HashSet<Tile> visited = new();
-      List<(Rectangle, float, bool)> mergedRegions = new();
-      //List<Tile> drawnTiles = Map.GetDistributor()._GridManager.GetAllDrawnTiles();
-      if (drawnTiles.Count == 0) return;
 
-      int tileSize = (int)(drawnTiles[0]._tileSize); //  Correct tile size
-
-      //  Spatial lookup for fast merging
-      Dictionary<(int, int), Tile> tileMap = new();
-      foreach (Tile tile in drawnTiles)
+    public bool Update()
+    {
+      IsUpdated = false;
+      _tileSize = MapScaleManager.Instance.ScaledTileSizePixels;
+      switch (CurrentState)
       {
-        var key = ((int)(tile.GlobalCenter.X / tileSize),
-                   (int)(tile.GlobalCenter.Y / tileSize));
-        tileMap[key] = tile;
+        case MergeState.Idle:
+
+          break;
+        case MergeState.NewPointsAdded:
+          CurrentState = ComputeMergedLines ? MergeState.ComputingTiles : MergeState.ReadyToDraw;
+          break;
+
+        case MergeState.ComputingTiles:
+          // Perform tile merging logic
+          // Merge trusted tiles into clusters
+          //ClusterTrustedTiles(_map.GetDistributor()._GridManager.GetAllTrustedTiles());
+          ClusterTrustedTiles(_map.NewTiles);
+          //if (DrawMergedTiles) GetClusterBoundingBoxes();
+          CurrentState = ComputeMergedLines ? MergeState.UpdatingClusters : MergeState.ReadyToDraw;
+          break;
+        case MergeState.UpdatingClusters:
+          // Update clusters
+          foreach (TileCluster cluster in TileClusters)
+          {
+            cluster.Update();
+          }
+          CurrentState = ComputeMergedLines ? MergeState.ComputingLines : MergeState.ReadyToDraw;
+          break;
+
+        case MergeState.ComputingLines:
+          // Process line detection from merged tiles
+          //DetectLinesFromUpdatedTiles();
+          DetectLargeFeatures();
+          CurrentState = ComputeMergedRectangles ? MergeState.RecalculatingPosition : MergeState.ReadyToDraw;
+          break;
+
+        case MergeState.ComputingRects:
+          // Process merging rectangles (if enabled)
+          // MergeRectangles(_map.GetDistributor()._GridManager.GetAllTrustedTiles());
+          MergeTilesFrameCounter = 0;
+          CurrentState = MergeState.ReadyToDraw;
+          break;
+
+        case MergeState.RecalculatingPosition:
+          // Process line detection from merged tiles
+          //DetectLinesFromUpdatedTiles();
+          //AlgorithmProvider.DevicePositionEstimator.Update(_mergedLines, _trustedTiles);
+          //ComputeDeviceMovement(_previousMergedLines, _mergedLines);
+          CurrentState = MergeState.ReadyToDraw;
+          break;
+
+        case MergeState.ReadyToDraw:
+          // Computation is complete; tiles and lines are ready for rendering.
+          // Reset state when ComputeMergedTiles is disabled
+          CurrentState = MergeState.Idle;
+          IsUpdated = true;          
+          break;
       }
 
-      foreach (Tile tile in drawnTiles)
+      return IsUpdated;
+    }
+
+    public void ClearMergedObjects()
+    {
+      _mergedRectangles.Clear();
+    }
+
+    private void ClusterTrustedTiles(HashSet<Tile> newTiles)
+    {
+      PreviousTileClusters = TileClusters.Select(cluster => cluster.Clone()).ToList();
+      List<TileCluster> updatedClusters = new();
+      HashSet<Tile> visited = new();
+      int maxSearchDistance = mergeTileRadius * _tileSize;
+
+      // **Step 1: Remove outdated clusters**
+      // **✅ Step 1: Remove Empty Clusters & Their Lines**
+      TileClusters.RemoveAll(cluster =>
       {
-        if (visited.Contains(tile)) continue;
-
-        //  Start a new merged region
-        List<Tile> mergedTiles = new() { tile };
-        float minX = tile.GlobalCenter.X;
-        float minY = tile.GlobalCenter.Y;
-        float maxX = minX;
-        float maxY = minY;
-        visited.Add(tile);
-
-        Queue<Tile> queue = new();
-        queue.Enqueue(tile);
-
-        List<float> lidarAngles = new();
-        int permanentTileCount = 0;
-
-        if (tile._lastLIDARpoint != null)
-          lidarAngles.Add(tile._lastLIDARpoint.Angle);
-
-        if (tile.IsPermanent)
-          permanentTileCount++;
-
-        while (queue.Count > 0)
+        if (cluster.Tiles.Count == 0)
         {
-          Tile currentTile = queue.Dequeue();
+          // ✅ Find and remove any merged line associated with this cluster
+          _mergedLines.RemoveAll(line => line.ParentCluster == cluster);
+          return true; // ✅ Remove the cluster
+        }
+        return false;
+      });
 
-          for (int dx = -1; dx <= 1; dx++)
+      // **Step 2: Assign each tile to an existing cluster before creating a new one**
+      foreach (Tile tile in newTiles)
+      {
+        if (!visited.Add(tile)) continue;
+
+        // **Find the nearest cluster within search distance**
+        TileCluster? nearestCluster = FindNearbyCluster(tile, maxSearchDistance);
+        if (nearestCluster != null)
+        {
+          nearestCluster.AddTile(tile);
+          tile.Cluster = nearestCluster;
+          updatedClusters.Add(nearestCluster);
+        } else
+        {
+          // **Create a new cluster only if no nearby cluster is found**
+          TileCluster newCluster = new TileCluster();
+          newCluster.AddTile(tile);
+          tile.Cluster = newCluster;
+          TileClusters.Add(newCluster);
+          updatedClusters.Add(newCluster);
+        }
+      }
+
+      // **Step 3: Merge overlapping clusters**
+      FastMergeOverlappingClusters(updatedClusters, maxSearchDistance);
+    }
+
+    private TileCluster? FindNearbyCluster(Tile tile, float maxDistance)
+    {
+      TileCluster? bestCluster = null;
+      float bestDistance = maxDistance;
+
+      foreach (var cluster in TileClusters)
+      {
+        // Find the closest point on the cluster's bounding box
+        Vector2 closestPoint = GetClosestPointOnBounds(tile.GlobalCenter, cluster.Bounds);
+        float distance = Vector2.Distance(tile.GlobalCenter, closestPoint);
+
+        if (distance < bestDistance)
+        {
+          bestCluster = cluster;
+          bestDistance = distance;
+        }
+      }
+
+      return bestCluster;
+    }
+    private Vector2 GetClosestPointOnBounds(Vector2 point, Rectangle bounds)
+    {
+      float closestX = Math.Clamp(point.X, bounds.Left, bounds.Right);
+      float closestY = Math.Clamp(point.Y, bounds.Top, bounds.Bottom);
+      return new Vector2(closestX, closestY);
+    }
+
+
+
+    private void FastMergeOverlappingClusters(List<TileCluster> updatedClusters, float maxDistance)
+    {
+      List<TileCluster> mergedClusters = new();
+      HashSet<TileCluster> processed = new();
+      HashSet<TileCluster> toRemove = new();
+
+      foreach (var cluster in updatedClusters)
+      {
+        if (processed.Contains(cluster)) continue; // Skip already merged clusters
+
+        TileCluster mergedCluster = new TileCluster(cluster); // Clone the current cluster
+        bool merged = false;
+
+        foreach (var otherCluster in TileClusters)
+        {
+          if (cluster == otherCluster || processed.Contains(otherCluster)) continue;
+
+          // 🔥 Check if clusters should be merged
+          if (ClustersAreClose(cluster, otherCluster, maxDistance))
           {
-            for (int dy = -1; dy <= 1; dy++)
-            {
-              var neighborKey = ((int)(currentTile.GlobalCenter.X / tileSize) + dx,
-                                 (int)(currentTile.GlobalCenter.Y / tileSize) + dy);
-
-              if (tileMap.TryGetValue(neighborKey, out Tile neighbor) && !visited.Contains(neighbor))
-              {
-                float distance = Vector2.Distance(currentTile.GlobalCenter, neighbor.GlobalCenter);
-
-                if (distance <= (mergeThreshold * tileSize))
-                {
-                  visited.Add(neighbor);
-                  queue.Enqueue(neighbor);
-                  mergedTiles.Add(neighbor);
-
-                  //  Update min/max boundaries
-                  minX = Math.Min(minX, neighbor.GlobalCenter.X);
-                  minY = Math.Min(minY, neighbor.GlobalCenter.Y);
-                  maxX = Math.Max(maxX, neighbor.GlobalCenter.X);
-                  maxY = Math.Max(maxY, neighbor.GlobalCenter.Y);
-
-                  if (neighbor._lastLIDARpoint != null)
-                    lidarAngles.Add(neighbor._lastLIDARpoint.Angle);
-
-                  if (neighbor.IsPermanent)
-                    permanentTileCount++;
-                }
-              }
-            }
+            mergedCluster.MergeWith(otherCluster);
+            toRemove.Add(otherCluster); // Mark for removal
+            processed.Add(otherCluster);
+            merged = true;
           }
         }
 
-        //  Compute dominant angle
-        float angle = ComputeDominantLidarAngle(lidarAngles);
+        if (merged) // Only add merged clusters
+        {
+          mergedClusters.Add(mergedCluster);
+        } else // Keep unmerged clusters
+        {
+          mergedClusters.Add(cluster);
+        }
 
-        //  Determine permanence
-        bool isPermanentRegion = (float)permanentTileCount / mergedTiles.Count >= 0.2f;
-
-        //  Corrected Rectangle Creation
-        int rectX = (int)(minX - tileSize / 2); // Move to top-left origin
-        int rectY = (int)(minY - tileSize / 2);
-        int rectWidth = (int)(maxX - minX + tileSize);
-        int rectHeight = (int)(maxY - minY + tileSize);
-
-        mergedRegions.Add((
-            new Rectangle(rectX, rectY, rectWidth, rectHeight),
-            angle,
-            isPermanentRegion
-        ));
+        processed.Add(cluster);
       }
 
-      _mergedObjects = mergedRegions;
+      // Remove clusters that have been merged
+      TileClusters.RemoveAll(cluster => toRemove.Contains(cluster));
+      // Add newly merged clusters back
+      TileClusters.AddRange(mergedClusters);
+    }
+
+
+
+    private bool ClustersAreClose(TileCluster clusterA, TileCluster clusterB, float maxDistance)
+    {
+      // 🔥 First quick check: If bounding boxes are already overlapping
+      if (clusterA.Bounds.Intersects(clusterB.Bounds))
+        return true; // Already touching
+
+      // 🔥 Find closest points on each cluster's bounding box
+      Vector2 closestPointA = GetClosestPointOnBounds(clusterA.Center, clusterB.Bounds);
+      Vector2 closestPointB = GetClosestPointOnBounds(clusterB.Center, clusterA.Bounds);
+
+      // 🔥 Measure the actual distance
+      float actualDistance = Vector2.Distance(closestPointA, closestPointB);
+
+      return actualDistance <= maxDistance;
+    }
+
+
+
+
+
+    // 🔹 Finds nearby clusters using **spatial lookup**
+    private List<HashSet<Tile>> GetNearbyClusters(Vector2 clusterCenter, float maxDistance)
+    {
+      List<HashSet<Tile>> nearbyClusters = new();
+      foreach (var (center, cluster) in clusterLookup)
+      {
+        if (Vector2.Distance(clusterCenter, center) < maxDistance)
+        {
+          nearbyClusters.Add(cluster);
+        }
+      }
+      return nearbyClusters;
+    }
+
+    // 🔹 Compute the center of a cluster
+    private Vector2 ComputeClusterCenter(HashSet<Tile> cluster)
+    {
+      float sumX = 0, sumY = 0;
+      int count = cluster.Count;
+
+      foreach (Tile tile in cluster)
+      {
+        sumX += tile.GlobalCenter.X;
+        sumY += tile.GlobalCenter.Y;
+      }
+
+      return new Vector2(sumX / count, sumY / count);
+    }
+
+
+    // 🔹 Store clusters in a **spatial index** (for quick lookups)
+
+
+
+    // WORKING; SLOW
+    //private void ClusterTrustedTiles(HashSet<Tile> drawnTiles)
+    //{
+    //  UpdateTileLookup(drawnTiles); // 🔥 Ensure TileLookup is updated
+
+    //  HashSet<Tile> visited = new();
+    //  Rectangle sourceBounds = UtilityProvider.Camera.GetSourceRectangle();
+    //  int maxSearchDistance = mergeTileRadius * _tileSize;
+
+    //  // **Step 1: Remove outdated clusters**
+    //  TileClusters = TileClusters
+    //      .Where(cluster => cluster.Any(tile => drawnTiles.Contains(tile))) // Keep only clusters with active tiles
+    //      .ToList();
+
+    //  tileToClusterMap.Clear(); // Reset mapping
+
+    //  foreach (Tile tile in drawnTiles)
+    //  {
+    //    if (!tileToClusterMap.ContainsKey(tile)) // Tile is new
+    //    {
+    //      newTiles.Add(tile);
+    //    }
+    //  }
+
+    //  if (newTiles.Count == 0) return; // No new tiles, no need to recompute clusters
+
+    //  foreach (Tile tile in newTiles)
+    //  {
+    //    if (!sourceBounds.Contains(tile.GlobalCenter.ToPoint())) continue;
+    //    if (!visited.Add(tile)) continue;
+
+    //    HashSet<Tile> cluster = new();
+    //    Queue<Tile> queue = new();
+    //    queue.Enqueue(tile);
+
+    //    while (queue.Count > 0)
+    //    {
+    //      Tile current = queue.Dequeue();
+    //      cluster.Add(current);
+
+    //      // 🔥 Get only nearby tiles using lookup
+    //      foreach (Tile neighbor in GetNearbyTiles(current, maxSearchDistance))
+    //      {
+    //        if (!visited.Contains(neighbor))
+    //        {
+    //          queue.Enqueue(neighbor);
+    //          visited.Add(neighbor);
+    //        }
+    //      }
+    //    }
+
+    //    if (cluster.Count > MinTileClusterSize)
+    //    {
+    //      TileClusters.Add(cluster);
+    //      foreach (Tile t in cluster)
+    //      {
+    //        tileToClusterMap[t] = cluster; // Store mapping
+    //      }
+    //    }
+    //  }
+
+    //  TileClusters = FastMergeOverlappingClusters(TileClusters, maxSearchDistance * 2);
+    //  newTiles.Clear();
+    //}
+
+
+    private void UpdateTileLookup(HashSet<Tile> drawnTiles)
+    {
+      TileLookup.Clear();
+      foreach (Tile tile in drawnTiles)
+      {
+        (int tileX, int tileY) = (
+            (int)(tile.GlobalCenter.X / _tileSize),
+            (int)(tile.GlobalCenter.Y / _tileSize)
+        );
+
+        TileLookup[(tileX, tileY)] = tile;
+      }
+    }
+    // WORKING, SLOW
+    //private List<HashSet<Tile>> FastMergeOverlappingClusters(List<HashSet<Tile>> clusters, float maxDistance)
+    //{
+    //  List<HashSet<Tile>> mergedClusters = new();
+    //  Dictionary<Tile, HashSet<Tile>> clusterMap = new();
+
+    //  // Assign clusters to their tiles for fast lookup
+    //  foreach (var cluster in clusters)
+    //  {
+    //    foreach (Tile tile in cluster)
+    //    {
+    //      clusterMap[tile] = cluster;
+    //    }
+    //  }
+
+    //  HashSet<HashSet<Tile>> processed = new();
+
+    //  foreach (var cluster in clusters)
+    //  {
+    //    if (processed.Contains(cluster)) continue;
+
+    //    HashSet<Tile> mergedCluster = new HashSet<Tile>(cluster);
+    //    Queue<HashSet<Tile>> clusterQueue = new Queue<HashSet<Tile>>();
+    //    clusterQueue.Enqueue(cluster);
+    //    processed.Add(cluster);
+
+    //    while (clusterQueue.Count > 0)
+    //    {
+    //      var currentCluster = clusterQueue.Dequeue();
+
+    //      foreach (Tile tile in currentCluster)
+    //      {
+    //        foreach (Tile neighbor in GetNearbyTiles(tile, maxDistance)) // 🔥 Use a function to get close neighbors
+    //        {
+    //          if (clusterMap.TryGetValue(neighbor, out var neighborCluster) &&
+    //              !processed.Contains(neighborCluster) &&
+    //              ClustersAreClose(currentCluster, neighborCluster, maxDistance))
+    //          {
+    //            mergedCluster.UnionWith(neighborCluster);
+    //            clusterQueue.Enqueue(neighborCluster);
+    //            processed.Add(neighborCluster);
+    //          }
+    //        }
+    //      }
+    //    }
+
+    //    mergedClusters.Add(mergedCluster);
+    //  }
+
+    //  return mergedClusters;
+    //}
+    public void DetectLargeFeatures()
+    {
+      _mergedLines.Clear();
+
+      foreach (var cluster in TileClusters)
+      {
+        cluster.ComputeFeatureLine();
+        if (cluster.FeatureLine != null)
+        {
+          _mergedLines.Add(cluster.FeatureLine);
+        }
+      }
+    }
+    public void AdjustClustersForMovement(Vector2 movementOffset, float rotationOffset)
+    {
+      foreach (var cluster in TileClusters)
+      {
+        cluster.AdjustForMovement(movementOffset, rotationOffset);
+      }
+    }
+
+
+    //public void DetectLargeFeatures()
+    //{
+    //  _mergedLines.Clear();
+
+    //  foreach (var cluster in TileClusters)
+    //  {
+    //    if (cluster.Tiles.Count < 10) continue; // Skip small clusters
+
+    //    // ✅ Skip if a permanent line already exists
+    //    if (_map.PermanentLines.Any(line => LineIntersectsCluster(line, cluster)))
+    //      continue;
+
+    //    // Extract all tile centers
+    //    List<Vector2> points = cluster.Tiles.Select(tile => tile.GlobalCenter).ToList();
+
+    //    // ✅ Compute PCA to determine dominant axis
+    //    (Vector2 direction, Vector2 centroid) = ComputePCA(points);
+
+    //    // ✅ Sort points along the dominant axis
+    //    points.Sort((a, b) => Vector2.Dot(a - centroid, direction).CompareTo(Vector2.Dot(b - centroid, direction)));
+
+    //    // ✅ Find min/max bounds
+    //    Vector2 minBound = new Vector2(points.Min(p => p.X), points.Min(p => p.Y));
+    //    Vector2 maxBound = new Vector2(points.Max(p => p.X), points.Max(p => p.Y));
+
+    //    // ✅ Filter out noise and ensure valid points
+    //    List<Vector2> containedPoints = points
+    //        .Where(p => minBound.X <= p.X && p.X <= maxBound.X && minBound.Y <= p.Y && p.Y <= maxBound.Y)
+    //        .ToList();
+
+    //    if (containedPoints.Count < 5) continue; // Skip clusters with too few valid points
+
+    //    // ✅ Identify endpoints of the best-fit line
+    //    Vector2 start = containedPoints.First();
+    //    Vector2 end = containedPoints.Last();
+    //    float lineLength = Vector2.Distance(start, end);
+
+    //    // ✅ Adjust filtering thresholds dynamically
+    //    float distanceFromLidar = Vector2.Distance(Vector2.Zero, centroid);
+    //    float straightnessThreshold = MathHelper.Lerp(5f, 10f, MathF.Min(distanceFromLidar / 1000f, 1f));
+
+    //    if (lineLength < MinLargeFeaturesLineLength) continue; // Skip short lines
+    //    if (!IsClusterStraight(containedPoints, direction, centroid, straightnessThreshold)) continue;
+
+    //    // ✅ Determine if the cluster should be marked as permanent
+    //    bool isPermanent = cluster.Tiles.Count(t => t.IsPermanent) / (float)cluster.Tiles.Count >= 0.5f;
+
+    //    // ✅ Calculate angle
+    //    float angleRadians = MathF.Atan2(end.Y - start.Y, end.X - start.X);
+    //    float angleDegrees = MathHelper.ToDegrees(angleRadians);
+
+    //    // ✅ Store detected line
+    //    _mergedLines.Add(new LineSegment(start, end, angleDegrees, angleRadians, isPermanent, cluster));
+    //  }
+
+    //  // ✅ Infer missing segments between detected features
+    //  //InferMissingWallSegments();
+    //}
+
+    private bool LineIntersectsCluster(LineSegment line, TileCluster cluster)
+    {
+      foreach (var tile in cluster.Tiles)
+      {
+        if (Vector2.Distance(line.Start, tile.GlobalCenter) < 50f ||
+            Vector2.Distance(line.End, tile.GlobalCenter) < 50f)
+        {
+          return true; // ✅ Line already exists for this cluster
+        }
+      }
+      return false;
+    }
+
+
+    private void ComputeDeviceMovement(List<(Vector2 Start, Vector2 End, float Angle, bool IsPermanent)> oldLines,
+                                   List<(Vector2 Start, Vector2 End, float Angle, bool IsPermanent)> newLines)
+    {
+      if (oldLines.Count == 0 || newLines.Count == 0)
+      {
+        Debug.WriteLine("ComputeDeviceMovement: No lines to compare.");
+        return;
+      }
+
+      List<Vector2> shifts = new();
+      List<float> angleChanges = new();
+
+      int comparisonCount = Math.Min(oldLines.Count, newLines.Count);
+      Debug.WriteLine($"Comparing {comparisonCount} old lines with {newLines.Count} new lines.");
+
+      for (int i = 0; i < comparisonCount; i++)
+      {
+        var oldLine = oldLines[i];
+        var newLine = newLines[i];
+
+        Vector2 oldMidpoint = (oldLine.Start + oldLine.End) / 2;
+        Vector2 newMidpoint = (newLine.Start + newLine.End) / 2;
+
+        Vector2 shift = newMidpoint - oldMidpoint;
+        shifts.Add(shift);
+
+        float angleChange = newLine.Angle - oldLine.Angle;
+        angleChanges.Add(angleChange);
+
+        Debug.WriteLine($"Line {i}: Old Midpoint: {oldMidpoint}, New Midpoint: {newMidpoint}, Shift: {shift}, Angle Change: {angleChange}");
+      }
+
+      // Compute the average shift (translation)
+      Vector2 avgShift = shifts.Aggregate(Vector2.Zero, (sum, v) => sum + v) / shifts.Count;
+      float avgRotation = angleChanges.Sum() / angleChanges.Count;
+
+      Debug.WriteLine($"Computed Shift: {avgShift}, Computed Rotation: {avgRotation}");
+
+      if (avgShift.Length() > 0.1f) // Ignore tiny shifts to avoid noise
+      {
+        _device.SetDevicePosition(_device._devicePosition + avgShift);
+        Debug.WriteLine($"New Device Position: {_device._devicePosition}");
+      } else
+      {
+        Debug.WriteLine("No significant shift detected.");
+      }
+
+      //if (Math.Abs(avgRotation) > 0.01f)
+      //{
+      //  _device.SetEstimatedRotation(_device._deviceRotation + avgRotation);
+      //  Debug.WriteLine($"New Device Rotation: {_device._deviceRotation}");
+      //}
+    }
+
+
+    private bool IsClusterStraight(List<Vector2> points, Vector2 direction, Vector2 centroid, float baseDeviation)
+    {
+      foreach (var point in points)
+      {
+        
+        float distanceFromLidar = Vector2.Distance(_device._devicePosition, point); // Assuming LiDAR is at (0,0)
+        float allowedDeviation = baseDeviation + (distanceFromLidar * 0.1f); // Increase tolerance for farther points
+
+        float projectedDistance = Math.Abs(Vector2.Dot(point - centroid, new Vector2(-direction.Y, direction.X))); // Perpendicular distance
+        if (projectedDistance > allowedDeviation)
+        {
+          return false; // Too much deviation, not a straight cluster
+        }
+      }
+      return true;
     }
 
 
@@ -170,34 +653,35 @@ namespace RPLIDAR_Mapping.Features.Map.Algorithms
       return MathHelper.ToRadians(avgDegrees);
     }
 
-    private float ComputeSurfaceAngle(List<Tile> tiles, int tileSize)
+
+    private (Vector2 Direction, Vector2 Centroid) ComputePCA(List<Vector2> points)
     {
-      float sumDx = 0;
-      float sumDy = 0;
-      int count = 0;
+      if (points.Count < 2) return (Vector2.UnitX, points[0]); // Default if not enough points
 
-      foreach (var tile in tiles)
+      // Compute centroid
+      Vector2 centroid = new Vector2(points.Average(p => p.X), points.Average(p => p.Y));
+
+      // Compute covariance matrix
+      float sumXX = 0, sumXY = 0, sumYY = 0;
+      foreach (var p in points)
       {
-        foreach (var neighbor in tiles)
-        {
-          if (tile == neighbor) continue;
-
-          float dx = neighbor.GlobalCenter.X - tile.GlobalCenter.X;
-          float dy = neighbor.GlobalCenter.Y - tile.GlobalCenter.Y;
-          float distance = Vector2.Distance(tile.GlobalCenter, neighbor.GlobalCenter);
-
-          if (distance <= tileSize * AppSettings.Default.TilemergeThreshold) // Only consider close neighbors
-          {
-            sumDx += dx;
-            sumDy += dy;
-            count++;
-          }
-        }
+        float dx = p.X - centroid.X;
+        float dy = p.Y - centroid.Y;
+        sumXX += dx * dx;
+        sumXY += dx * dy;
+        sumYY += dy * dy;
       }
 
-      if (count == 0) return 0f; // No rotation if no neighbors are found
+      // Solve for the eigenvector of the dominant eigenvalue
+      float trace = sumXX + sumYY;
+      float determinant = (sumXX * sumYY) - (sumXY * sumXY);
+      float eigenvalue = (trace + MathF.Sqrt(trace * trace - 4 * determinant)) / 2;
 
-      return (float)Math.Atan2(sumDy, sumDx); // Returns the rotation angle in radians
+      Vector2 direction = new Vector2(sumXY, eigenvalue - sumXX);
+      direction.Normalize();
+
+      return (direction, centroid);
     }
+
   }
 }

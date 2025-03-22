@@ -8,7 +8,7 @@ using Microsoft.Xna.Framework.Graphics;
 using RPLIDAR_Mapping.Features.Communications;
 using RPLIDAR_Mapping.Interfaces;
 using RPLIDAR_Mapping.Models;
-using RPLIDAR_Mapping.Utilities;
+using RPLIDAR_Mapping.Providers;
 
 namespace RPLIDAR_Mapping.Features.Communications
 {
@@ -22,15 +22,16 @@ namespace RPLIDAR_Mapping.Features.Communications
     private Thread _serialListenerThread; //  Background thread for Serial reading
     private bool _isListeningSerial = false; //  Flag to control serial listening
     public Rectangle _deviceRect {  get; private set; }
-    public Vector2 _devicePosition { get; private set; }
+    public Vector2 _devicePosition { get; set; }
     public Texture2D _deviceTexture { get; private set; }
-    public float _deviceOrientation { get; private set; }
+    public float _deviceOrientation { get; set; }
     private const int DeviceWidth = 20; 
     private const int DeviceHeight = 20;
 
     public Device(ConnectionParams connectionParameters, GuiManager gm)
     {
       string communicationType = connectionParameters.ConnectionType;
+      //AlgorithmProvider.DevicePositionEstimator._device = this;
       _ConnectionParams = connectionParameters; 
       _GuiManager = gm;
       _GuiManager.SetDevice(this);
@@ -70,6 +71,10 @@ namespace RPLIDAR_Mapping.Features.Communications
 
 
     }
+    public void SetDevicePosition(Vector2 newPos)
+    {
+      _devicePosition = newPos;
+    }
     private void UpdateDeviceRect()
     {
       _deviceRect = new Rectangle(
@@ -90,22 +95,7 @@ namespace RPLIDAR_Mapping.Features.Communications
     }
 
 
-    /// <summary>
-    /// Updates the device position using the transformation from scan matching.
-    /// </summary>
-    /// <param name="transform">The transformation computed from scan matching (translation and rotation).</param>
-    public void UpdatePositionFromScan(Transformation transform)
-    {
-      // Use the translation vector to update the device's position.
-      Vector2 deltaPosition = new Vector2((float)transform.t[0], (float)transform.t[1]);
-      _devicePosition += deltaPosition;
-      Log(_devicePosition.ToString() );
-      double thetaDelta = Math.Atan2(transform.R[1, 0], transform.R[0, 0]);
-      _deviceOrientation += (float)thetaDelta;
 
-      // Update the device's rectangle to reflect the new position.
-      _deviceRect = new Rectangle((int)_devicePosition.X, (int)_devicePosition.Y, DeviceWidth, DeviceHeight);
-    }
     private void SendInitMode()
     {
       if (_serialPort != null && _serialPort.IsOpen)

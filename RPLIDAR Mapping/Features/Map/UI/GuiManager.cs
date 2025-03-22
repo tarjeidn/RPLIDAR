@@ -5,7 +5,6 @@ using MonoGame.ImGuiNet;
 using RPLIDAR_Mapping.Features.Map;
 using RPLIDAR_Mapping.Features.Map.Algorithms;
 using RPLIDAR_Mapping.Features.Map.UI;
-using RPLIDAR_Mapping.Utilities;
 using RPLIDAR_Mapping.Features.Communications;
 using System;
 using System.Collections.Generic;
@@ -13,6 +12,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using RPLIDAR_Mapping.Models;
 using RPLIDAR_Mapping.Core;
+using RPLIDAR_Mapping.Providers;
 
 public class GuiManager
 {
@@ -23,6 +23,8 @@ public class GuiManager
   private ConnectionParams _tempConnectionParams;
   private LidarSettings _tempLidarSettings;
   private Mapplication _MainApplication;
+  private UserSelection UserSelection;
+  public Map _map { get; set; }
   private System.Numerics.Vector2 GuiSize;
   private System.Numerics.Vector2 GuiPosition;
   private bool _showLogWindow = true;
@@ -36,11 +38,12 @@ public class GuiManager
   private bool _showLidarSettings = false;
 
   public GuiManager(Mapplication mainapp)  {
-    _MainApplication = mainapp;
+    _MainApplication = mainapp;    
     _guiRenderer = new ImGuiRenderer(mainapp);
     _graphicsDevice = GraphicsDeviceProvider.GraphicsDevice;
     _tileTrustRegulator = AlgorithmProvider.TileTrustRegulator;
     _tileMerge = AlgorithmProvider.TileMerge;
+    UserSelection = GUIProvider.UserSelection;
     ScreenWidth = _graphicsDevice.Viewport.Width;
     ScreenHeight = _graphicsDevice.Viewport.Height;
     GuiSize = new System.Numerics.Vector2((int)(ScreenWidth * 0.3), (int)(ScreenHeight * 0.8));
@@ -152,21 +155,47 @@ public class GuiManager
 
     //ImGui.Begin("Main Window", ref _showLogWindow, ImGuiWindowFlags.MenuBar);
     ImGui.Begin("Main Window", ref _showLogWindow, windowFlags);
+    // **Merge Highlighted Lines Button**
+    if (UserSelection.highlightedLines.Count > 0) // Only show if lines are selected
+    {
+      if (ImGui.Button("Infer missing lines"))
+      {
+        UserSelection.InferLinesBetweenSelected();
+      }
+      if (ImGui.Button("Delete selected lines"))
+      {
+        UserSelection.DeleteSelectedLines();
+      }
+    }
+    if (UserSelection.highlightedLines.Count > 0 ) // Only show if lines are selected
+    {
+      ImGui.SameLine();
+      if (ImGui.Button("Merge Selected Lines"))
+      {
+        UserSelection.MergeSelectedLinesIntoWalls();
+      }
+    }
 
     float zoom = MapScaleManager.Instance.MapZoomFactor;
     float gridScaleFactor = MapScaleManager.Instance.ScaleFactor;
     float minPointDistance = _tileMerge.MinPointDistance;
     int minPointQuality = _tileMerge.MinPointQuality;
+    int MinTileBufferSizeToAdd = _map.MinTileBufferSizeToAdd;
 
 
     if (ImGui.SliderFloat("Grid Scale", ref gridScaleFactor, 0.1f, 8.0f, "%.2f"))
+    {
       MapScaleManager.Instance.SetScaleFactor(gridScaleFactor);
+      _MainApplication.MapUpdated = true;
+    }
     if (ImGui.SliderFloat("Zoom", ref zoom, 0.05f, 1))
       MapScaleManager.Instance.SetMapZoomFactor(zoom);
     if (ImGui.SliderInt("Minimum point quality", ref minPointQuality, 0, 10))
       _tileMerge.MinPointQuality = minPointQuality;
     if (ImGui.SliderFloat("MinimumPointDistance", ref minPointDistance, 0, 200))
       _tileMerge.MinPointDistance = minPointDistance;
+    if (ImGui.SliderInt("Minimum tiles to add", ref MinTileBufferSizeToAdd, 10, 500))
+      _map.MinTileBufferSizeToAdd = MinTileBufferSizeToAdd;
     if (ImGui.SliderFloat("Font Scale", ref _fontScale, 0.5f, 4.0f, "%.2f"))
     {
       ImGui.GetIO().FontGlobalScale = _fontScale;
@@ -190,7 +219,6 @@ public class GuiManager
       // Regulator Settings Tab
       if (ImGui.BeginTabItem("Regulator Settings"))
       {
-        DrawTileRegulatorSettings();
         DrawTileRegulatorSettings();
       }
       if (ImGui.BeginTabItem("Map scale Settings"))
@@ -287,23 +315,57 @@ public class GuiManager
     //  Read values from the regulator
     bool regulatorEnabled = _tileTrustRegulator.RegulatorEnabled;
     bool drawMergedTiles = _tileMerge.DrawMergedTiles;
+    bool drawMergedLines = _tileMerge.DrawMergedLines;
+    bool computeMerged = _tileMerge.ComputeMergedTiles;
     float trustIncrement = _tileTrustRegulator.TrustIncrement;
     float trustDecrement = _tileTrustRegulator.TrustDecrement;
     float tileMergeThreshold = _tileMerge.TileMergeThreshold;
     int decayFrequency = _tileTrustRegulator.DecayFrequency;
     int trustThreshold = _tileTrustRegulator.TrustThreshold;
     int mergeFrequency = _tileMerge.MergeFrequency;
-    int minMergedTileSize = _tileMerge.MinMergedTileSize;
+    int MinLargeFeaturesLineLength = _tileMerge.MinLargeFeaturesLineLength;
+    int minTileClusterSize = _tileMerge.MinTileClusterSize;
+    int mergeTileRadius = _tileMerge.mergeTileRadius;
 
     //  Sliders allow manual adjustments (values are updated in TileTrustRegulator)
+    if (ImGui.Checkbox("Compute merged points", ref computeMerged))
+    {
+      _tileMerge.ComputeMergedTiles = computeMerged;
+
+      // If ComputeMerged is disabled, also disable the other two checkboxes
+      if (!computeMerged)
+      {
+        drawMergedTiles = false;
+        drawMergedLines = false;
+        _tileMerge.DrawMergedTiles = false;
+        _tileMerge.DrawMergedLines = false;
+      }
+    }
+
+    ImGui.SameLine();
+
+    // Disable the checkboxes if computeMerged is false
+    ImGui.BeginDisabled(!computeMerged);
     if (ImGui.Checkbox("Draw merged tiles", ref drawMergedTiles))
     {
       _tileMerge.DrawMergedTiles = drawMergedTiles;
     }
+    ImGui.SameLine();
 
-    if (ImGui.SliderInt("Minimum merged tile size (pixels)", ref minMergedTileSize, 0, 100))
+    if (ImGui.Checkbox("Draw merged lines", ref drawMergedLines))
     {
-      _tileMerge.MinMergedTileSize = minMergedTileSize;
+      _tileMerge.DrawMergedLines = drawMergedLines;
+    }
+    ImGui.EndDisabled();
+    if (ImGui.SliderInt("Point Cluster Merge Radius", ref mergeTileRadius, 0, 50))
+      _tileMerge.mergeTileRadius = mergeTileRadius; ;
+    if (ImGui.SliderInt("Minimum merged tile cluster size", ref minTileClusterSize, 2, 100))
+    {
+      _tileMerge.MinTileClusterSize = minTileClusterSize;
+    }
+    if (ImGui.SliderInt("Minimum large feature line length", ref MinLargeFeaturesLineLength, 10, 1000))
+    {
+      _tileMerge.MinLargeFeaturesLineLength = MinLargeFeaturesLineLength;
     }
 
     if (ImGui.SliderInt("Tile merge frequency (updates)", ref mergeFrequency, 0, 100))
@@ -355,6 +417,7 @@ public class GuiManager
 
     if (ImGui.SliderFloat("Grid size (meters)", ref gridAreaMeters, 0.1f, 5.0f, "%.2f"))
       MapScaleManager.Instance.SetGridAreaMeters(gridAreaMeters);
+
 
     ImGui.Text($"Tile pixel size: {MapScaleManager.Instance.ScaledTileSizePixels}");
 

@@ -10,14 +10,14 @@ using Microsoft.Xna.Framework;
 using RPLIDAR_Mapping.Features.Map.UI;
 
 
-namespace RPLIDAR_Mapping.Utilities
+namespace RPLIDAR_Mapping.Providers
 {
   public static class ContentManagerProvider
   {
     private static Dictionary<string, SpriteFont> fonts = new Dictionary<string, SpriteFont>(); //  Store fonts globally
 
     private static ContentManager content;
-    private static Dictionary<string, Dictionary<string,Dictionary<string, Texture2D>>> textures = new Dictionary<string, Dictionary<string, Dictionary<string, Texture2D>>>();
+    private static Dictionary<string, Dictionary<string, Dictionary<string, Texture2D>>> textures = new Dictionary<string, Dictionary<string, Dictionary<string, Texture2D>>>();
     private static Texture2D tileTexture;
     private static Texture2D WhiteTexture;
 
@@ -30,7 +30,7 @@ namespace RPLIDAR_Mapping.Utilities
     {
       _graphicsDevice = GraphicsDeviceProvider.GraphicsDevice;
       content = contentManager;
-      textures["Utility"] = new Dictionary<string,Dictionary<string, Texture2D>>();
+      textures["Utility"] = new Dictionary<string, Dictionary<string, Texture2D>>();
       WhiteTexture = CreateWhitePixel(_graphicsDevice);
       _lineEffect = new BasicEffect(_graphicsDevice)
       {
@@ -103,8 +103,7 @@ namespace RPLIDAR_Mapping.Utilities
           textures[mainFolder][subFolder].ContainsKey(fileName))
       {
         return textures[mainFolder][subFolder][fileName];
-      }
-      else
+      } else
       {
         return LoadTexture(path);
       }
@@ -131,8 +130,7 @@ namespace RPLIDAR_Mapping.Utilities
           fonts[fontName] = content.Load<SpriteFont>(path);
           Console.WriteLine($"Successfully loaded font: {fontName} from {path}");
         }
-      }
-      catch (Exception ex)
+      } catch (Exception ex)
       {
         Console.WriteLine($"Error loading font '{fontName}' from '{path}': {ex.Message}");
       }
@@ -148,11 +146,11 @@ namespace RPLIDAR_Mapping.Utilities
 
       throw new KeyNotFoundException($"Font '{fontName}' not found. Make sure it is loaded.");
     }
-    public static void DrawRenderTargetBorder(SpriteBatch spriteBatch,  Rectangle target, int thickness, Color borderColor)
+    public static void DrawRenderTargetBorder(SpriteBatch spriteBatch, Rectangle target, int thickness, Color borderColor)
     {
 
-      int width = (int)target.Width;
-      int height = (int)target.Height;
+      int width = target.Width;
+      int height = target.Height;
 
 
 
@@ -167,7 +165,7 @@ namespace RPLIDAR_Mapping.Utilities
 
 
     }
-   
+
 
     //public static void DrawRectangleBorder(SpriteBatch spriteBatch, Rectangle rect, int thickness, Color borderColor)
     //{

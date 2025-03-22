@@ -1,4 +1,5 @@
 ﻿using Microsoft.Xna.Framework.Graphics;
+using RPLIDAR_Mapping.Utilities;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -6,7 +7,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace RPLIDAR_Mapping.Utilities
+namespace RPLIDAR_Mapping.Providers
 {
   public static class GraphicsDeviceProvider
   {
@@ -29,8 +30,7 @@ namespace RPLIDAR_Mapping.Utilities
       if (targets.Length > 0 && targets[0].RenderTarget != null)
       {
         Debug.WriteLine($"Current Render Target: {targets[0].RenderTarget.Name}");
-      }
-      else
+      } else
       {
         Debug.WriteLine("Current Render Target: Default Screen (null)");
       }

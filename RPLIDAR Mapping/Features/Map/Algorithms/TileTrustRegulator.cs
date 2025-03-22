@@ -1,5 +1,5 @@
 ﻿using RPLIDAR_Mapping.Features.Map.GridModel;
-using RPLIDAR_Mapping.Utilities;
+using RPLIDAR_Mapping.Providers;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -32,7 +32,7 @@ namespace RPLIDAR_Mapping.Features.Map.Algorithms
 
     public bool RegulatorEnabled = false;
     public float TrustIncrement = 50;
-    public float TrustDecrement = 2;
+    public float TrustDecrement = 40;
 
     public int TileDecayRate = 10;
     public int MaxTileDecayRate = 300;

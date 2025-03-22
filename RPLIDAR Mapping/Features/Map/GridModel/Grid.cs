@@ -1,5 +1,4 @@
 ﻿using Microsoft.Xna.Framework.Graphics;
-using RPLIDAR_Mapping.Utilities;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -14,6 +13,8 @@ using RPLIDAR_Mapping.Features.Map.UI;
 using RPLIDAR_Mapping.Core;
 using SharpDX.Direct2D1.Effects;
 using RPLIDAR_Mapping.Features.Map.Algorithms;
+using RPLIDAR_Mapping.Providers;
+using static RPLIDAR_Mapping.Features.Map.Map;
 
 
 
@@ -41,7 +42,7 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
     public Dictionary<(int, int), Tile> _updatedTiles;
     public Dictionary<(int, int), Tile> _drawnTiles;
     public List<Tile> _drawnTilesList;
-    public List<Tile> _trustedTiles;
+    private HashSet<Tile> _trustedTiles = new();
     public GridManager GridManager;
     public GridStats Stats;
     private TileTrustRegulator TTR =  AlgorithmProvider.TileTrustRegulator;
@@ -49,10 +50,7 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
     float permanentDecayModifier = 0.5f;  //  Permanent tiles decay at half speed
     public float GridScaleFactor;
     public float _scaleToPixels;
-
-
-
-
+    public bool IsUpdated = false;
     public float GridSizeMeters { get; private set; }
     public int tileSize { get; private set; }  // Actual tile unit size (cm)
 
@@ -64,24 +62,10 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
       Stats = gm.GridStats;
       GridSizePixels = MapScaleManager.Instance.ScaledGridSizePixels;
       GridSizeMeters = MapScaleManager.Instance.GridAreaMeters;
-      //GridSizePixels = AppSettings.Default.GridPixels; // 3000px
-      //GridSizeMeters = AppSettings.Default.GridSizeM; // 10m
 
-
-
-      // 🔥 Use GridScaleFactor to determine world unit per tile
       GridScaleFactor = MapScaleManager.Instance.ScaleFactor;
 
-
-      //  Compute tile size (scaled to cm)
       tileSize = MapScaleManager.Instance.ScaledTileSizePixels;
-      //tileSize = (int)(AppSettings.Default.GridTileSizeCM * GridScaleFactor);
-      //if (tileSize < 1) 
-      //{ 
-      //  tileSize = 1;
-      //}
-
-
 
       _SpriteBatch = GraphicsDeviceProvider.SpriteBatch;
       _GraphicsDevice = GraphicsDeviceProvider.GraphicsDevice;
@@ -94,7 +78,7 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
       //  Initialize collections (before using them)
       _updatedTiles = new Dictionary<(int, int), Tile>();
       _drawnTiles = new Dictionary<(int, int), Tile>();
-      _trustedTiles = new List<Tile>();
+
       _drawnTilesList = new List<Tile>();
 
       //  Create render targets with the scaled grid size
@@ -105,15 +89,12 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
     public void ResetTiles()
     {      
       _drawnTiles.Clear();
+      IsUpdated = true;
     }
-
-
 
     public bool Update()
     {
-      bool gridupdated = false;
-
-      return gridupdated; 
+      return IsUpdated; 
     }
     public void DecayTiles()
     {
@@ -122,30 +103,35 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
       foreach (var kvp in _drawnTiles)
       {
         Tile tile = kvp.Value;
-
+        bool permanent = false;
         //if (tile.TrustedScore > 0)
         //{
         //  tile.TrustedScore -= AppSettings.Default.TileTrustDecrement;
         //}
         if (tile.IsPermanent)
         {
+          permanent = true;
           tile.TrustedScore = Math.Max(0, tile.TrustedScore - (TTR.TrustDecrement * permanentDecayModifier));
-          if (tile.TrustedScore < TTR.TrustThreshold) Stats.HighTrustTilesLostLastCycle++;
+
         } else tile.TrustedScore = Math.Max(0, tile.TrustedScore - TTR.TrustDecrement);
-
-
-
-
+        tile.UpdateTrust();
+        if (permanent && !tile.IsPermanent)
+        {
+          _trustedTiles.Remove(tile);
+        }
         if (tile.TrustedScore <= 0)
         {
+          IsUpdated= true;
           keysToRemove.Add(kvp.Key);
           tile.TrustedScore = 0;
+          tile.Cluster?.RemoveTile(tile);
         }
       }
 
       foreach (var key in keysToRemove)
       {
         _drawnTiles.Remove(key);
+
       }
     }
 
@@ -166,9 +152,45 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
 
       tile.TrustedScore = Math.Min(100, tile.TrustedScore + TTR.TrustIncrement);
 
-      _drawnTiles.TryAdd((X, Y), tile);
+      if (_drawnTiles.TryAdd((X, Y), tile)) GridManager._map.NewTiles.Add(tile); 
+
       StatisticsProvider.GridStats.RegisterPointAdded(X, Y);
       tile.UpdateTrust();
+      if (tile.TrustedScore > 50)
+      {
+        _trustedTiles.Add(tile);
+      }
+      // ✅ Register observation and add to lookup
+      Vector2 devicePosition = GridManager._map._device._devicePosition;
+      tile.RegisterObservation(devicePosition, point.Angle, point.Distance);
+
+      var key = new ObservationKey(devicePosition, point.Angle, point.Distance);
+      if (Map.ObservationLookup.TryGetValue(key, out Tile oldTile))
+      {
+        GridManager._map.MatchedTileCount++;
+        Tile currentTile = GetTileAt(X, Y);
+
+        int oldX = (int)(oldTile.GlobalCenter.X / MapScaleManager.Instance.ScaledTileSizePixels);
+        int oldY = (int)(oldTile.GlobalCenter.Y / MapScaleManager.Instance.ScaledTileSizePixels);
+
+        int newX = (int)(currentTile.GlobalCenter.X / MapScaleManager.Instance.ScaledTileSizePixels);
+        int newY = (int)(currentTile.GlobalCenter.Y / MapScaleManager.Instance.ScaledTileSizePixels);
+
+        int dx = Math.Abs(oldX - newX);
+        int dy = Math.Abs(oldY - newY);
+
+        if (dx + dy > 1 )  // use (dx > 0 || dy > 0) for 0 tolerance or use dx + dy > 1 to allow 1-tile tolerance
+        {
+          GridManager._map.MismatchedTileCount++;
+          //Debug.WriteLine($"⚠️ MISMATCH: Expected tile ({oldX},{oldY}), got ({newX},{newY})");
+        }
+      }
+      if (!Map.ObservationLookup.ContainsKey(key))
+      {
+        Map.ObservationLookup.Add(key, tile);
+      }
+
+      IsUpdated = true;
     }
 
 
@@ -201,16 +223,14 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
       return tile;
     }
 
-    public List<Tile> GetDrawnTiles()
+    //public Dictionary<(int, int), Tile> GetTrustedTiles()
+    //{
+    //  return _drawnTiles;
+    //}
+    public HashSet<Tile> GetTrustedTiles()
     {
-      _drawnTilesList.Clear();
-      foreach(Tile tile in  _drawnTiles.Values)
-      {
-        _drawnTilesList.Add(tile);
-      }
-      return _drawnTilesList;
+      return new HashSet<Tile>(_drawnTiles.Values);
     }
-
 
 
 

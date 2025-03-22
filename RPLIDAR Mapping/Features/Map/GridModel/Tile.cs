@@ -12,6 +12,7 @@ using SharpDX.DirectWrite;
 using System.Diagnostics;
 using RPLIDAR_Mapping.Features.Map.UI;
 using RPLIDAR_Mapping.Features.Map.Algorithms;
+using RPLIDAR_Mapping.Providers;
 
 namespace RPLIDAR_Mapping.Features.Map.GridModel
 {
@@ -32,7 +33,7 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
     public Vector2 GlobalCenter { get; set; }
     public Vector2 WorldGlobalPosition { get; set; }
 
-
+    public TileCluster Cluster { get; set; }
     public MapPoint _lastLIDARpoint { get; set; }
     private readonly SpriteBatch _SpriteBatch;
     public int _tileSize {  get; set; }
@@ -42,9 +43,14 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
     public int AmountofDecays { get; set; }
     private TileTrustRegulator TTR { get; set;}
     private const int PermanentTrustThreshold = 50;  // How many cycles a tile must stay trusted to be permanent
-    private const float TrustDropResetThreshold = 70;  // If trust drops below this, reset counter
-
-
+    private const float TrustDropResetThreshold = 50;  // If trust drops below this, reset counter
+    public struct Observation
+    {
+      public Vector2 DevicePosition;
+      public float Angle;
+      public float Distance;
+    }
+    private List<Observation> _pastObservations = new();
     public Tile(int x, int y, Grid grid)
     {
       // Tile index within the grid
@@ -72,6 +78,15 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
 
       _TileTexture = ContentManagerProvider.GetTexture("tiletexture");
       TTR = AlgorithmProvider.TileTrustRegulator;
+    }
+    public void RegisterObservation(Vector2 devicePosition, float angle, float distance)
+    {
+      _pastObservations.Add(new Observation
+      {
+        DevicePosition = devicePosition,
+        Angle = angle,
+        Distance = distance
+      });
     }
     public void UpdateTrust()
     {
@@ -102,26 +117,7 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
 
     public void Draw(SpriteBatch spriteBatch, Vector2 screenPos, Vector2 decivePos)
     {
-      const float TrustDropBuffer = 5;
-      if (IsDrawn)
-      {
-        if (TrustedScore < TTR.TileTrustTreshHold - TrustDropBuffer)
-        {
-          IsDrawn = false;
-          return;
-        }
-      }
-      else
-      {
-        if (TrustedScore >= TTR.TileTrustTreshHold)
-        {
-          IsDrawn = true;
-        }
-        else
-        {
-          return;
-        }
-      }
+
 
       float intensity = 0;
       if (TrustedScore != 0)

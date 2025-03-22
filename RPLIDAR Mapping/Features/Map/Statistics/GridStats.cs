@@ -1,5 +1,5 @@
 ﻿using RPLIDAR_Mapping.Features.Map.GridModel;
-using RPLIDAR_Mapping.Utilities;
+using RPLIDAR_Mapping.Providers;
 using System;
 using System.Collections.Generic;
 using System.Linq;

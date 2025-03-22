@@ -1,6 +1,7 @@
 ﻿using Microsoft.Xna.Framework;
 using Newtonsoft.Json;
 using RPLIDAR_Mapping.Models;
+using RPLIDAR_Mapping.Providers;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -49,6 +50,13 @@ namespace RPLIDAR_Mapping.Utilities
         message = null;
         return false;
       }
+    }
+    public static Vector2 PolarToCartesian(float angleDegrees, float distance)
+    {
+      float angleRadians = MathHelper.ToRadians(angleDegrees);
+      float x = distance * (float)Math.Cos(angleRadians);
+      float y = distance * (float)Math.Sin(angleRadians);
+      return new Vector2(x, y);
     }
 
     public static void ProcessLidarBatchJson(string jsonData, ConcurrentQueue<DataPoint> queue)

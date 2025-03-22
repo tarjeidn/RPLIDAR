@@ -7,7 +7,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace RPLIDAR_Mapping.Utilities
+namespace RPLIDAR_Mapping.Providers
 {
   public static class StatisticsProvider
   {

@@ -4,6 +4,7 @@ using System;
 using RPLIDAR_Mapping.Utilities;
 using System.Diagnostics;
 using SharpDX.Direct2D1.Effects;
+using RPLIDAR_Mapping.Features.Communications;
 
 namespace RPLIDAR_Mapping.Features.Map.UI
 {
@@ -17,8 +18,8 @@ namespace RPLIDAR_Mapping.Features.Map.UI
     private int ScreenHeight;
     private Vector2 DestRectPos;
     public Vector2 Position { get; private set; } = Vector2.Zero;
-    public Vector2 ZoomFocusPoint { get; private set; } 
-
+    public Vector2 ZoomFocusPoint { get; private set; }
+    public Device _device {  get; set; }
     private GraphicsDevice _graphicsDevice;
     private int _gridSize;
 
@@ -64,7 +65,85 @@ namespace RPLIDAR_Mapping.Features.Map.UI
       Vector2 scaledOffset = zoomedOffset / scale; // Scale after zoom
       return screenCenter + scaledOffset;
     }
+    //public Vector2 WorldToScreen(Vector2 worldPosition)
+    //{
+    //  Vector2 screenCenter = GetDestinationRectangle().Center.ToVector2();
+    //  float scale = MapScaleManager.Instance.ScaleFactor;
 
+    //  // **Apply Rotation Correction**
+    //  Vector2 rotatedOffset = RotatePoint(worldPosition - Position, -_device._deviceOrientation); // 🔄 Apply rotation
+
+    //  Vector2 baseOffset = rotatedOffset; // Distance from camera position
+    //  Vector2 zoomedOffset = baseOffset * (1f / Zoom); // Apply zoom before scaling
+    //  Vector2 scaledOffset = zoomedOffset / scale; // Scale after zoom
+
+    //  return screenCenter + scaledOffset;
+    //}
+
+    public Rectangle WorldToScreen(Rectangle worldRect)
+    {
+      Vector2 screenPos = WorldToScreen(new Vector2(worldRect.X, worldRect.Y)); // Convert position
+
+      float scale = MapScaleManager.Instance.ScaleFactor;
+      float scaledZoom = (1f / Zoom) / scale; // Apply zoom and scaling factor
+
+      int screenWidth = (int)(worldRect.Width * scaledZoom);
+      int screenHeight = (int)(worldRect.Height * scaledZoom);
+
+      return new Rectangle((int)screenPos.X, (int)screenPos.Y, screenWidth, screenHeight);
+    }
+    public Vector2 ScreenToWorld(Vector2 screenPosition)
+    {
+      Vector2 screenCenter = GetDestinationRectangle().Center.ToVector2();
+
+      float scale = MapScaleManager.Instance.ScaleFactor; // 🔥 Correct scale factor
+      float adjustedZoom = Zoom * scale; // 🔥 Ensure zoom applies correctly
+
+      // Reverse the transformation process
+      Vector2 scaledOffset = (screenPosition - screenCenter) * scale; // Apply scale
+      Vector2 zoomedOffset = scaledOffset * Zoom; // Apply zoom
+      Vector2 worldPosition = Position + zoomedOffset; // Convert to world position
+
+      return worldPosition;
+    }
+    //public Vector2 ScreenToWorld(Vector2 screenPosition)
+    //{
+    //  Vector2 screenCenter = GetDestinationRectangle().Center.ToVector2();
+    //  float scale = MapScaleManager.Instance.ScaleFactor;
+    //  float adjustedZoom = Zoom * scale;
+
+    //  Vector2 scaledOffset = (screenPosition - screenCenter) * scale;
+    //  Vector2 zoomedOffset = scaledOffset * Zoom;
+
+    //  // **Apply Reverse Rotation**
+    //  Vector2 worldOffset = RotatePoint(zoomedOffset, _device._deviceOrientation); // 🔄 Reverse rotation
+
+    //  return Position + worldOffset;
+    //}
+
+
+    public Rectangle ScreenToWorld(Rectangle screenRect)
+    {
+      Vector2 worldTopLeft = ScreenToWorld(new Vector2(screenRect.Left, screenRect.Top));
+      Vector2 worldBottomRight = ScreenToWorld(new Vector2(screenRect.Right, screenRect.Bottom));
+
+      return new Rectangle(
+          (int)worldTopLeft.X,
+          (int)worldTopLeft.Y,
+          (int)(worldBottomRight.X - worldTopLeft.X),
+          (int)(worldBottomRight.Y - worldTopLeft.Y)
+      );
+    }
+    private Vector2 RotatePoint(Vector2 point, float radians)
+    {
+      float cos = MathF.Cos(radians);
+      float sin = MathF.Sin(radians);
+
+      return new Vector2(
+          cos * point.X - sin * point.Y,
+          sin * point.X + cos * point.Y
+      );
+    }
 
 
     //public Rectangle GetViewportBounds()

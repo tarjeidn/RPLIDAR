@@ -1,5 +1,5 @@
 ﻿using Microsoft.Xna.Framework;
-using RPLIDAR_Mapping.Utilities;
+using RPLIDAR_Mapping.Providers;
 using System;
 using System.Collections.Generic;
 using System.Linq;

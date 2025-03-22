@@ -9,6 +9,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using RPLIDAR_Mapping.Providers;
 
 namespace RPLIDAR_Mapping.Utilities
 {
@@ -17,7 +18,7 @@ namespace RPLIDAR_Mapping.Utilities
   public static class DrawingHelperFunctions
   {
     private static GraphicsDevice GraphicsDevice = GraphicsDeviceProvider.GraphicsDevice;
-    private static Texture2D WhiteTexture = CreateWhitePixel(GraphicsDevice);
+    public static Texture2D WhiteTexture = CreateWhitePixel(GraphicsDevice);
     public static void DrawGridPattern(SpriteBatch spriteBatch, Rectangle destRect, Vector2 deviceScreenPos, int lineThickness, float alpha = 0.3f)
     {
       Camera camera = UtilityProvider.Camera;
@@ -97,6 +98,71 @@ namespace RPLIDAR_Mapping.Utilities
           0
       );
     }
+
+    public static bool ClipLineToRectangle(ref Vector2 start, ref Vector2 end, Rectangle rect)
+    {
+      const int INSIDE = 0, LEFT = 1, RIGHT = 2, BOTTOM = 4, TOP = 8;
+
+      int ComputeOutCode(Vector2 p)
+      {
+        int code = INSIDE;
+        if (p.X < rect.Left) code |= LEFT;
+        else if (p.X > rect.Right) code |= RIGHT;
+        if (p.Y < rect.Top) code |= TOP;
+        else if (p.Y > rect.Bottom) code |= BOTTOM;
+        return code;
+      }
+
+      int outcodeStart = ComputeOutCode(start);
+      int outcodeEnd = ComputeOutCode(end);
+
+      while (true)
+      {
+        if ((outcodeStart | outcodeEnd) == 0)
+        {
+          // Both points inside
+          return true;
+        } else if ((outcodeStart & outcodeEnd) != 0)
+        {
+          // Both points outside (completely outside)
+          return false;
+        } else
+        {
+          // One point is inside, the other is outside; clip the line
+          int outcodeOut = outcodeStart != 0 ? outcodeStart : outcodeEnd;
+          Vector2 newPoint = Vector2.Zero;
+
+          if ((outcodeOut & TOP) != 0)
+          {
+            newPoint.X = start.X + (end.X - start.X) * (rect.Top - start.Y) / (end.Y - start.Y);
+            newPoint.Y = rect.Top;
+          } else if ((outcodeOut & BOTTOM) != 0)
+          {
+            newPoint.X = start.X + (end.X - start.X) * (rect.Bottom - start.Y) / (end.Y - start.Y);
+            newPoint.Y = rect.Bottom;
+          } else if ((outcodeOut & RIGHT) != 0)
+          {
+            newPoint.Y = start.Y + (end.Y - start.Y) * (rect.Right - start.X) / (end.X - start.X);
+            newPoint.X = rect.Right;
+          } else if ((outcodeOut & LEFT) != 0)
+          {
+            newPoint.Y = start.Y + (end.Y - start.Y) * (rect.Left - start.X) / (end.X - start.X);
+            newPoint.X = rect.Left;
+          }
+
+          if (outcodeOut == outcodeStart)
+          {
+            start = newPoint;
+            outcodeStart = ComputeOutCode(start);
+          } else
+          {
+            end = newPoint;
+            outcodeEnd = ComputeOutCode(end);
+          }
+        }
+      }
+    }
+
     public static Vector2 GetScreenBorderIntersection(Vector2 tileScreenPos, Rectangle destRect, float lidarAngleRadians)
     {
       // 🔥 Compute direction from LiDAR angle

@@ -15,10 +15,11 @@ using System.Diagnostics;
 using System.ComponentModel;
 using RPLIDAR_Mapping.Features.Map.UI;
 using RPLIDAR_Mapping.Features.Map.UI.Overlays;
-using SharpDX.DirectWrite;
-
-
-
+using RPLIDAR_Mapping.Features.Map;
+using RPLIDAR_Mapping.Features.Map.Algorithms;
+using RPLIDAR_Mapping.Providers;
+using MathNet.Numerics.LinearAlgebra.Factorization;
+using MathNet.Numerics.Random;
 
 
 namespace RPLIDAR_Mapping.Features.Map
@@ -30,7 +31,12 @@ namespace RPLIDAR_Mapping.Features.Map
     public readonly GraphicsDevice _GraphicsDevice;
     private readonly SpriteBatch _SpriteBatch;
     public readonly GridManager _GridManager;
+    private RenderTarget2D TilesRenderTarget_A;
+    private RenderTarget2D TilesRenderTarget_B;
+    private bool _activeRenderTargetA = true; // Track which target is active
+    private TileMerge _TileMerge;
     public Camera _Camera;
+    private UserSelection _UserSelection;
     private readonly DistanceOverlay _distanceOverlay;
     private Queue<(int, int)> _gridDrawQueue = new Queue<(int, int)>();
     private bool _isQueueInitialized = false;
@@ -45,16 +51,19 @@ namespace RPLIDAR_Mapping.Features.Map
     public bool DrawCycleActive = false;
     public Vector2 MainScreenSize;
     public Device _device;
-    public Vector2 _centerOfFullMap {  get; set; }
+    public Vector2 _centerOfFullMap { get; set; }
 
     public MapRenderer(Map map)
     {
       _Camera = UtilityProvider.Camera;
-
+      _UserSelection = GUIProvider.UserSelection;
       MainScreenSize = new Vector2(MainScreenWidth, MainScreenHeight);
       _ScaledTileSize = AppSettings.Default.GridTileSizeCM * AppSettings.Default.GridScaleCMtoPixels;
       _GraphicsDevice = GraphicsDeviceProvider.GraphicsDevice;
       _SpriteBatch = GraphicsDeviceProvider.SpriteBatch;
+      _TileMerge = AlgorithmProvider.TileMerge;
+      TilesRenderTarget_A = new RenderTarget2D(_GraphicsDevice, MainScreenWidth, MainScreenHeight);
+      TilesRenderTarget_B = new RenderTarget2D(_GraphicsDevice, MainScreenWidth, MainScreenHeight);
       _map = map;
       _GridManager = _map.GetDistributor()._GridManager;
       _gridSize = _GridManager._gridSizePixels;
@@ -84,6 +93,7 @@ namespace RPLIDAR_Mapping.Features.Map
         if (_gridDrawQueue.Count == 0)
         {
           //DrawCycleActive = false;
+          _activeRenderTargetA = !_activeRenderTargetA;
           break; // 🛑 Avoid errors if queue is empty
         }
 
@@ -126,33 +136,19 @@ namespace RPLIDAR_Mapping.Features.Map
       DrawCycleActive = _gridDrawQueue.Count > 0;
     }
 
-    
-
-    private void RefillGridQueue()
-{
-    _gridDrawQueue.Clear();
-
-    foreach (var gridKey in _GridManager.Grids.Keys)
-    {
-        _gridDrawQueue.Enqueue(gridKey);
-    }
-
-    _SpriteBatch.GraphicsDevice.Clear(Color.Black); //  Ensure screen resets when starting a new cycle
-}
-    public void DrawOverlays()
+    public void DrawOverlays(Vector2 deviceScreenPos)
     {
       Camera camera = UtilityProvider.Camera;
       Rectangle sourceBounds = camera.GetSourceRectangle();
       Rectangle destBounds = camera.GetDestinationRectangle();
-      Vector2 devicePosition = _device._devicePosition;
-      Vector2 deviceScreenPos = _Camera.WorldToScreen(devicePosition);
+
       _centerOfFullMap = destBounds.Center.ToVector2();
       DrawingHelperFunctions.DrawGridPattern(_SpriteBatch, destBounds, deviceScreenPos, 2);
       DrawingHelperFunctions.DrawRectangleBorder(_SpriteBatch, destBounds, 5, Color.White);
       //DrawingHelperFunctions.DrawRectangleBorder(_SpriteBatch, sourceBounds, 5, Color.Red);
       //DrawingHelperFunctions.DrawRectangleBorder(_SpriteBatch, viewPort, 5, Color.Blue);
 
-      
+
 
       _SpriteBatch.DrawString(
           ContentManagerProvider.GetFont("DebugFont"),
@@ -161,48 +157,155 @@ namespace RPLIDAR_Mapping.Features.Map
           Color.White
       );
 
-      //  Draw device last (so it's always on top)
-      _SpriteBatch.Draw(
-          _device._deviceTexture,
-          _device.GetDeviceRectRelative(deviceScreenPos),
-          Color.Red
-      );
-    }
-    private int _framesSinceLastClear = 0; //  Count frames before clearing
 
-    public void DrawMap()
+    }
+
+
+    public void DrawMap(bool isMapUpdated)
     {
       Vector2 devicePosition = _device._devicePosition;
-      //  If the queue is empty but DrawCycleActive is still true, it means all grids were drawn last frame.
-      if (_gridDrawQueue.Count == 0 && DrawCycleActive)
-      {
-        DrawCycleActive = false;
-      }
+      Vector2 deviceScreenPos = _Camera.WorldToScreen(devicePosition);
+      Rectangle sourceBounds = _Camera.GetSourceRectangle();
 
-      //  If the cycle is inactive, reset everything **only once**
-      if (!DrawCycleActive)
+
+
+      if (isMapUpdated)
       {
-        _GraphicsDevice.Clear(Color.Black);
-        DrawOverlays();
         foreach (var gridKey in _GridManager.Grids.Keys)
         {
-          if (_GridManager.Grids[gridKey] != null && _GridManager.Grids[gridKey]._drawnTiles.Count > 0)
+          Grid grid = _GridManager.Grids[gridKey];
+          if (grid != null && grid._drawnTiles.Count > 0)
           {
             _gridDrawQueue.Enqueue(gridKey);
           }
         }
-        DrawCycleActive = _gridDrawQueue.Count > 0; //  Start new cycle
+        DrawTilesCanvas();
       }
+      _SpriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp, null, null);
 
-      if (DrawCycleActive) DrawGrids(devicePosition, 100);
+      _GraphicsDevice.Clear(Color.Black); // 🔥 Clear only if drawing full map
+                                          // 🔥 Draw the currently active render target to the screen
+      RenderTarget2D targetToDraw = _activeRenderTargetA ? TilesRenderTarget_A : TilesRenderTarget_B;
+      _SpriteBatch.Draw(targetToDraw, Vector2.Zero, Color.White);
+      DrawOverlays(deviceScreenPos); // 🔥 Overlays always update
+      if (_TileMerge.DrawMergedLines && _TileMerge.ComputeMergedLines) DrawMergedLines(sourceBounds);
+      DrawDevice(deviceScreenPos);
+      DrawSelection(sourceBounds);
+      if (_map.PermanentLines.Count > 0) DrawPermanentLines(sourceBounds);
+      if (_TileMerge.DrawMergedTiles) DrawClusterBoundingRectangles();
+      _SpriteBatch.End();
+    }
+    private void DrawPermanentLines(Rectangle sourceBounds)
+    {
+      List<LineSegment> updatedLines = new();
+      foreach (var line in _map.PermanentLines)
+      {
+        Vector2 start = line.Start;
+        Vector2 end = line.End;
+
+        if (DrawingHelperFunctions.ClipLineToRectangle(ref start, ref end, sourceBounds))
+        {
+          updatedLines.Add(new LineSegment(start, end, line.AngleDegrees, line.AngleRadians, line.IsPermanent));
+
+          Vector2 screenStart = _Camera.WorldToScreen(start);
+          Vector2 screenEnd = _Camera.WorldToScreen(end);
+          DrawingHelperFunctions.DrawLine(_SpriteBatch, screenStart, screenEnd, Color.Green, 5);
+        }
+      }
+    }
+    private void DrawDevice(Vector2 deviceScreenPos)
+    {
+      Rectangle deviceRect = _device.GetDeviceRectRelative(deviceScreenPos);
+      //Vector2 estimatedDevicePos = AlgorithmProvider.DevicePositionEstimator.UpdatedPosition;
+      // Convert estimated world position to screen space
+      //Vector2 estimatedDeviceScreenPos = _Camera.WorldToScreen(estimatedDevicePos);
+
+      // Create a slightly larger rectangle for estimated position
+      int sizeIncrease = 10; // Adjust as needed
+      //Rectangle estimatedRect = new Rectangle(
+      //    (int)(estimatedDeviceScreenPos.X - deviceRect.Width / 2 - sizeIncrease),
+      //    (int)(estimatedDeviceScreenPos.Y - deviceRect.Height / 2 - sizeIncrease),
+      //    deviceRect.Width + (sizeIncrease * 2),
+      //    deviceRect.Height + (sizeIncrease * 2)
+      //);
+      _SpriteBatch.Draw(
+          _device._deviceTexture,
+          deviceRect,
+          Color.Red
+      );
+      // Draw estimated position as a blue border
+      //DrawingHelperFunctions.DrawRectangleBorder(_SpriteBatch, estimatedRect, 3, Color.Blue);
+      DrawDeviceOrientationLine(deviceScreenPos);
 
     }
+    private void DrawDeviceOrientationLine(Vector2 deviceScreenPos)
+    {
 
+      float lineLength = 50f; // Adjust as needed
+      Vector2 direction = new Vector2(MathF.Cos(_device._deviceOrientation - MathF.PI / 2),
+                                      MathF.Sin(_device._deviceOrientation - MathF.PI / 2));
+      Vector2 endPoint = deviceScreenPos + (direction * lineLength); // Compute endpoint
+
+      // Draw line indicating direction
+      DrawingHelperFunctions.DrawLine(_SpriteBatch, deviceScreenPos, endPoint, Color.Green, 3);
+    }
+    private void DrawTilesCanvas()
+    {
+      // Swap to inactive target for rendering
+      RenderTarget2D targetToDraw = _activeRenderTargetA ? TilesRenderTarget_B : TilesRenderTarget_A;
+
+      _GraphicsDevice.SetRenderTarget(targetToDraw);
+      _GraphicsDevice.Clear(Color.Black);
+
+      _SpriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp, null, null);
+
+      DrawGrids(_device._devicePosition, 200); // Draw tiles in batches
+
+      _SpriteBatch.End();
+      _GraphicsDevice.SetRenderTarget(null);
+    }
+    private void DrawSelection(Rectangle sourceBounds)
+    {
+
+      if (_UserSelection.isSelecting)
+      {
+        // Draw selection rectangle
+        DrawingHelperFunctions.DrawRectangleBorder(_SpriteBatch, _UserSelection.selectionBox, 4, Color.Blue * 0.9f); // Semi-transparent blue
+      }
+
+      // Draw highlighted lines
+      List<(Vector2 Start, Vector2 End, float AngleDegrees, float AngleRadians, bool IsPermanent)> updatedLines = new();
+      foreach (var line in _UserSelection.highlightedLines)
+      {
+        Vector2 start = line.Start;
+        Vector2 end = line.End;
+        // Set color: Inferred lines are RED, regular lines are BLUE
+        Color linecolor = Color.Yellow;
+        if (DrawingHelperFunctions.ClipLineToRectangle(ref start, ref end, sourceBounds))
+        {
+          updatedLines.Add((start, end, line.AngleDegrees, line.AngleRadians, line.IsPermanent));
+
+          Vector2 screenStart = _Camera.WorldToScreen(start);
+          Vector2 screenEnd = _Camera.WorldToScreen(end);
+          DrawingHelperFunctions.DrawLine(_SpriteBatch, screenStart, screenEnd, linecolor, 5);
+        }
+      }
+
+    }
+    private void DrawClusterBoundingRectangles()
+    {
+      foreach (var cluster in _TileMerge.TileClusters)
+      {
+        Rectangle rect = cluster.Bounds;
+        Rectangle screenRect = _Camera.WorldToScreen(rect);
+        DrawingHelperFunctions.DrawRectangleBorder(_SpriteBatch, screenRect, 2, Color.White);
+      }
+    }
     private void DrawMergedRectangles(Vector2 devicePosition, Vector2 centerOfFullMap)
     {
       // IMPORTANT: set minsize here, do not look it up from settings in the if statement. Causes a huge drop in speed
       int minSize = _map._tileMerge.MinMergedTileSize;
-      foreach (var (rect, angle, ispermanent) in _map._tileMerge._mergedObjects)
+      foreach (var (rect, angle, ispermanent) in _map._tileMerge._mergedRectangles)
       {
         if (rect.Width < minSize && rect.Height < minSize)
         {
@@ -249,41 +352,36 @@ namespace RPLIDAR_Mapping.Features.Map
 
           continue;
         }
-        tile.Draw(spriteBatch, screenPos, devicePos);
+        tile.Draw(_SpriteBatch, screenPos, devicePos);
       }
     }
+    private void DrawMergedLines(Rectangle sourceBounds)
+    {
+      if (_TileMerge._mergedLines == null || _TileMerge._mergedLines.Count == 0) return;
 
-    //public void DrawTiles(SpriteBatch spriteBatch, Vector2 gridOffset, Grid grid, Vector2 devicePos)
-    //{
-    //  Camera camera = UtilityProvider.Camera;
-    //  Rectangle sourceBounds = camera.GetSourceRectangle();
-
-
-
-    //  foreach (Tile tile in grid._drawnTiles.Values)
-    //  {
-    //    //  LOG: Check if tile passes trust threshold
-    //    if (tile.TrustedScore < AlgorithmProvider.TileTrustRegulator.TileTrustTreshHold)
-    //    {
-    //      continue;
-    //    }
-
-    //    //  Convert tile position to world space
-    //    Vector2 worldPos = tile.WorldGlobalPosition;
-    //    Vector2 screenPos = camera.WorldToScreen(worldPos);
-    //    Rectangle tileBounds = tile.WorldRect;
-    //    //  LOG: Check if tile is visible
-    //    if (!sourceBounds.Intersects(tileBounds))
-    //    {
-    //      continue;
-    //    }
-
-    //    tile.Draw(spriteBatch, screenPos, devicePos);
-    //  }
-    //}
+      Camera camera = UtilityProvider.Camera;
 
 
+      List<LineSegment> updatedLines = new();
 
+      foreach (var line in _TileMerge._mergedLines)
+      {
+        Vector2 start = line.Start;
+        Vector2 end = line.End;
+
+        if (DrawingHelperFunctions.ClipLineToRectangle(ref start, ref end, sourceBounds))
+        {
+          updatedLines.Add(new LineSegment(start, end, line.AngleDegrees, line.AngleRadians, line.IsPermanent));
+
+          Vector2 screenStart = _Camera.WorldToScreen(start);
+          Vector2 screenEnd = _Camera.WorldToScreen(end);
+          DrawingHelperFunctions.DrawLine(_SpriteBatch, screenStart, screenEnd, Color.White, 5);
+        }
+      }
+
+
+      _TileMerge._mergedLines = updatedLines; // Replace with the clipped lines
+    }
 
   }
 }

@@ -7,17 +7,18 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace RPLIDAR_Mapping.Utilities
+namespace RPLIDAR_Mapping.Providers
 {
   public static class AlgorithmProvider
   {
-
+    public static DevicePositionEstimator DevicePositionEstimator { get; set; }
     public static TileTrustRegulator TileTrustRegulator { get; private set; }
     public static TileMerge TileMerge { get; private set; }
     public static void Initialize()
     {
       TileTrustRegulator = new TileTrustRegulator();
       TileMerge = new TileMerge();
+      DevicePositionEstimator = new DevicePositionEstimator();
     }
   }
 }

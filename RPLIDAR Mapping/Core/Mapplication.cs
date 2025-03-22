@@ -10,6 +10,7 @@ using RPLIDAR_Mapping.Features.Map;
 using RPLIDAR_Mapping.Features.Map.UI;
 using RPLIDAR_Mapping.Interfaces;
 using RPLIDAR_Mapping.Models;
+using RPLIDAR_Mapping.Providers;
 using RPLIDAR_Mapping.Utilities;
 
 
@@ -48,14 +49,13 @@ namespace RPLIDAR_Mapping.Core
     private Rectangle _view;
     private float _mapScale = 1.0f;
     private Vector2 _mapDrawingPosition = new Vector2(100, 100);
-    private bool MapUpdated = false;
+    public bool MapUpdated = false;
 
 
 
 
     public Mapplication()
     {
-
       _graphics = new GraphicsDeviceManager(this);
       _graphics.IsFullScreen = false;
       _graphics.PreferredBackBufferWidth = GraphicsAdapter.DefaultAdapter.CurrentDisplayMode.Width;
@@ -73,10 +73,10 @@ namespace RPLIDAR_Mapping.Core
       AppDomain.CurrentDomain.ProcessExit += (s, e) => DisposeDevice();
       AppDomain.CurrentDomain.UnhandledException += (s, e) => DisposeDevice();
       AlgorithmProvider.Initialize();
+      GUIProvider.Initialize();
       GraphicsDeviceProvider.Initialize(GraphicsDevice, UtilityProvider.FPSCounter);
       UtilityProvider.Initialize(GraphicsDeviceProvider.GraphicsDevice);
       ContentManagerProvider.Initialize(Content);
-
       _camera = UtilityProvider.Camera;
 
       _fpsCounter = UtilityProvider.FPSCounter;
@@ -112,12 +112,17 @@ namespace RPLIDAR_Mapping.Core
       ContentManagerProvider.LoadFont("DebugFont", "Fonts/Debug");
       _guiManager = new GuiManager(this);
       _device = new Device(_connectionParams, _guiManager);
+      AlgorithmProvider.TileMerge._device = _device;
       _inputManager = new InputManager(_device);
       _spriteBatch = GraphicsDeviceProvider.SpriteBatch;
-      _map = new Map(_device);
+      _map = new Map(_device, _inputManager);
+      //AlgorithmProvider.DevicePositionEstimator._map = _map;
+      //AlgorithmProvider.DevicePositionEstimator._device = _device;
       _mapRenderer = new MapRenderer(_map);
       _mapRenderer._device = _device;
-
+      GUIProvider.UserSelection._map = _map;
+      _guiManager._map = _map;
+      _camera._device = _device;
       StatisticsProvider.Initialize(_map.GetDistributor()._GridManager.GridStats, _map._MapStats);
       Task.Run(() =>
       {
@@ -152,17 +157,17 @@ namespace RPLIDAR_Mapping.Core
         if (GamePad.GetState(PlayerIndex.One).Buttons.Back == ButtonState.Pressed || Keyboard.GetState().IsKeyDown(Keys.Escape))
           Exit();
 
-        float deltaTime = (float)gameTime.ElapsedGameTime.TotalSeconds;
+        //float deltaTime = (float)gameTime.ElapsedGameTime.TotalSeconds;
 
-        _inputManager.Update(gameTime);
+        //_inputManager.Update(gameTime);
 
 
-        UtilityProvider.Camera.CenterOn(_device._devicePosition);
+        UtilityProvider.Camera.CenterOn(Vector2.Zero);
 
         // Process LiDAR data
         List<DataPoint> lidarDataList = _device.GetData();
 
-        MapUpdated = _map.Update(lidarDataList, deltaTime);
+        MapUpdated = _map.Update(lidarDataList, gameTime);
 
 
         base.Update(gameTime);
@@ -179,21 +184,13 @@ namespace RPLIDAR_Mapping.Core
     {
       if (_map == null) return;
       // 
-      if (MapUpdated || _mapRenderer.DrawCycleActive) 
-      { 
-        _spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp, null, null);
-        _mapRenderer.DrawMap();
-        _spriteBatch.End();
-      }
+
+      _mapRenderer.DrawMap(MapUpdated);
+
       _guiManager.Draw(gameTime);
       base.Draw(gameTime);
 
-
     }
-    
-
-
-
 
     protected override void UnloadContent()
     {
@@ -247,7 +244,7 @@ namespace RPLIDAR_Mapping.Core
       // Reinitialize the device and dependencies
       _device = newDevice;
       _inputManager = new InputManager(newDevice);
-      _map = new Map(newDevice);
+      _map = new Map(newDevice, _inputManager);
       _mapRenderer = new MapRenderer(_map);
       _mapRenderer._device = newDevice;
 

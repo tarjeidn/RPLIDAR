@@ -3,7 +3,7 @@ using RPLIDAR_Mapping.Features.Map.Algorithms;
 using RPLIDAR_Mapping.Features.Map.Statistics;
 using RPLIDAR_Mapping.Features.Map.UI;
 using RPLIDAR_Mapping.Models;
-using RPLIDAR_Mapping.Utilities;
+using RPLIDAR_Mapping.Providers;
 using SharpDX.MediaFoundation;
 using System;
 using System.Collections.Generic;
@@ -72,7 +72,6 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
       {        
         if (doDecay) {
           grid.DecayTiles();
-          gridupdated = true;
         }
         if (grid.Update()) gridupdated = true;
       }
@@ -80,7 +79,7 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
       return gridupdated;
     }
 
-    private Grid GetOrCreateGrid(int gridX, int gridY)
+    private Grid GetOrCreateGrid(int gridX, int gridY, bool createIfMissing = true)
     {
       var key = (gridX, gridY);
       if (!Grids.ContainsKey(key))
@@ -122,32 +121,68 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
         GetOrCreateGrid(gridX, gridY).AddPoint(localX, localY, point);
       }
     }
+    public Tile GetTileAtGlobalCoordinates(float globalX, float globalY)
+    {
+      float scaledGridSize = MapScaleManager.Instance.ScaledGridSizePixels;
+      float scaledTileSize = MapScaleManager.Instance.ScaledTileSizePixels;
 
+      int gridX = (int)Math.Floor(globalX / scaledGridSize);
+      int gridY = (int)Math.Floor(globalY / scaledGridSize);
 
+      int maxTilesPerGrid = (int)(scaledGridSize / scaledTileSize);
 
+      int localX = Math.Clamp((int)((globalX - (gridX * scaledGridSize)) / scaledTileSize), 0, maxTilesPerGrid - 1);
+      int localY = Math.Clamp((int)((globalY - (gridY * scaledGridSize)) / scaledTileSize), 0, maxTilesPerGrid - 1);
 
+      // Optional: warn on out-of-bounds
+      if (localX < 0 || localX >= maxTilesPerGrid || localY < 0 || localY >= maxTilesPerGrid)
+      {
+        Debug.WriteLine($"⚠ WARNING: Tile ({localX}, {localY}) out of bounds! (Grid {gridX}, {gridY})");
+        return null;
+      }
 
-
-
-
-
-
-
+      Grid grid = GetOrCreateGrid(gridX, gridY, createIfMissing: false);
+      return grid.GetTileAt(localX, localY);
+    }
 
 
     public IEnumerable<Grid> GetAllGrids()
     {
       return Grids.Values;
     }
-    public List<Tile> GetAllDrawnTiles()
+    public HashSet<Tile> GetAllTrustedTiles()
     {
-      List<Tile> tiles = new List<Tile>();
-      foreach(Grid grid in Grids.Values)
+      HashSet<Tile> allTrustedTiles = new();
+
+      foreach (Grid grid in Grids.Values)
       {
-        tiles.AddRange(grid.GetDrawnTiles());
+        allTrustedTiles.UnionWith(grid.GetTrustedTiles());
       }
-      return tiles;
+
+      return allTrustedTiles;
     }
+
+    //public Dictionary<(int, int), Dictionary<(int, int), Tile>> GetAllTrustedTiles()
+    //{
+    //  Dictionary<(int, int), Dictionary<(int, int), Tile>> allTrustedTiles = new();
+
+    //  foreach (var kvp in Grids) // Loop through grids
+    //  {
+    //    (int gridX, int gridY) = kvp.Key; // Grid index
+    //    Grid grid = kvp.Value;
+
+    //    // Get all trusted tiles for this grid
+    //    Dictionary<(int, int), Tile> gridTiles = grid.GetTrustedTiles();
+
+    //    // Store them under their respective grid coordinates
+    //    allTrustedTiles.TryAdd((gridX, gridY), gridTiles);
+    //  }
+
+    //  return allTrustedTiles;
+    //}
+
+
+
 
 
   }

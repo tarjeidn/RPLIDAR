@@ -7,25 +7,65 @@ using System.Linq;
 using RPLIDAR_Mapping.Interfaces;
 using RPLIDAR_Mapping.Features.Communications;
 
+using RPLIDAR_Mapping.Features.Map.UI;
+using RPLIDAR_Mapping.Providers;
+using ImGuiNET;
+
 namespace RPLIDAR_Mapping.Utilities
 {
-  internal class InputManager
+  public class InputManager
   {
     private Dictionary<string, bool> _keyStates = new Dictionary<string, bool>();
     private Dictionary<string, double> _keyCooldowns = new Dictionary<string, double>();
     private const double CooldownTime = 500; // 500ms cooldown for each key
     private Device _device;
+    private UserSelection _UserSelection;
 
     public InputManager(Device device)
     {
       _device = device;
+      _UserSelection = GUIProvider.UserSelection;
     }
 
     public void Update(GameTime gameTime)
     {
       double currentTime = gameTime.TotalGameTime.TotalMilliseconds;
-      var pressedKeys = getPressedKeys();
 
+      HandleKeyBoard(currentTime);
+      HandleMouse();
+
+      
+    }
+    private void HandleMouse()
+    {
+      MouseState mouse = Mouse.GetState();
+
+      if (mouse.LeftButton == ButtonState.Pressed)
+      {
+        if (!_UserSelection.isSelecting)
+        {
+          if (ImGui.IsAnyItemHovered() || ImGui.IsAnyItemActive()) return; // 🔥 Prevent clearing when clicking UI
+
+          // Start selection
+          _UserSelection.isSelecting = true;
+          _UserSelection.selectionStart = new Vector2(mouse.X, mouse.Y);
+        }
+
+        // Update the selection box while dragging
+        _UserSelection.selectionEnd = new Vector2(mouse.X, mouse.Y);
+        _UserSelection.selectionBox = _UserSelection.CreateRectangle(_UserSelection.selectionStart, _UserSelection.selectionEnd);
+
+      } else if (mouse.LeftButton == ButtonState.Released && _UserSelection.isSelecting)
+      {
+        // Finish selection
+        _UserSelection.isSelecting = false;
+        _UserSelection.HighlightLinesInSelection();
+      }
+    }
+
+    private void HandleKeyBoard(double currentTime)
+    {
+      var pressedKeys = getPressedKeys();
       foreach (string key in pressedKeys)
       {
         // Check if the key is on cooldown
@@ -56,7 +96,9 @@ namespace RPLIDAR_Mapping.Utilities
       }
     }
 
-    private void HandleKeyPress(string key)
+
+
+private void HandleKeyPress(string key)
     {
       if (_device.IsConnected)
       {
