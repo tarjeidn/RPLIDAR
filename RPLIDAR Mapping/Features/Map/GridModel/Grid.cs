@@ -60,12 +60,14 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
     {
       GridManager = gm;
       Stats = gm.GridStats;
-      GridSizePixels = MapScaleManager.Instance.ScaledGridSizePixels;
+      //GridSizePixels = MapScaleManager.Instance.ScaledGridSizePixels;
+      GridSizePixels = 1000;
       GridSizeMeters = MapScaleManager.Instance.GridAreaMeters;
 
       GridScaleFactor = MapScaleManager.Instance.ScaleFactor;
 
-      tileSize = MapScaleManager.Instance.ScaledTileSizePixels;
+      //tileSize = MapScaleManager.Instance.ScaledTileSizePixels;
+      tileSize = 10;
 
       _SpriteBatch = GraphicsDeviceProvider.SpriteBatch;
       _GraphicsDevice = GraphicsDeviceProvider.GraphicsDevice;
@@ -115,8 +117,9 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
 
         } else tile.TrustedScore = Math.Max(0, tile.TrustedScore - TTR.TrustDecrement);
         tile.UpdateTrust();
-        if (permanent && !tile.IsPermanent)
+        if (tile.TrustedScore < AlgorithmProvider.TileTrustRegulator.TrustThreshold)
         {
+          tile.IsTrusted = false;
           _trustedTiles.Remove(tile);
         }
         if (tile.TrustedScore <= 0)
@@ -140,14 +143,16 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
     {
       Tile tile = GetTileAt(X, Y);
       tile._lastLIDARpoint = point;
+      int tileSize = 10;
+      //int tileSize = ridManager.GridScaleFactor;
 
-      //  Scale cm values directly into pixels
-      float scaledX = point.GlobalX * GridManager.GridScaleFactor;
-      float scaledY = point.GlobalY * GridManager.GridScaleFactor; ;
+      //  Scale values directly into pixels
+      float scaledX = point.GlobalX * tileSize;
+      float scaledY = point.GlobalY * tileSize;
 
-      //tile.Position = new Vector2(X * tileSize, Y * tileSize);
-      tile.Position = new Vector2(tile.GlobalCenter.X * GridManager.GridScaleFactor,
-                                  tile.GlobalCenter.Y * GridManager.GridScaleFactor);
+      tile.Position = new Vector2(X * tileSize, Y * tileSize);
+      //tile.Position = new Vector2(tile.GlobalCenter.X * tileSize,
+      //                            tile.GlobalCenter.Y * tileSize);
 
 
       tile.TrustedScore = Math.Min(100, tile.TrustedScore + TTR.TrustIncrement);
@@ -156,25 +161,27 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
 
       StatisticsProvider.GridStats.RegisterPointAdded(X, Y);
       tile.UpdateTrust();
-      if (tile.TrustedScore > 50)
+      if (tile.TrustedScore > AlgorithmProvider.TileTrustRegulator.TileTrustTreshHold)
       {
+        tile.IsTrusted = true;
         _trustedTiles.Add(tile);
       }
       // ✅ Register observation and add to lookup
       Vector2 devicePosition = GridManager._map._device._devicePosition;
+      float deviceOrientation = GridManager._map._device._deviceOrientation;
       tile.RegisterObservation(devicePosition, point.Angle, point.Distance);
 
-      var key = new ObservationKey(devicePosition, point.Angle, point.Distance);
+      var key = new ObservationKey(devicePosition, point.Angle, point.Distance, deviceOrientation);
       if (Map.ObservationLookup.TryGetValue(key, out Tile oldTile))
       {
         GridManager._map.MatchedTileCount++;
         Tile currentTile = GetTileAt(X, Y);
 
-        int oldX = (int)(oldTile.GlobalCenter.X / MapScaleManager.Instance.ScaledTileSizePixels);
-        int oldY = (int)(oldTile.GlobalCenter.Y / MapScaleManager.Instance.ScaledTileSizePixels);
+        int oldX = (int)(oldTile.GlobalCenter.X / tileSize);
+        int oldY = (int)(oldTile.GlobalCenter.Y / tileSize);
 
-        int newX = (int)(currentTile.GlobalCenter.X / MapScaleManager.Instance.ScaledTileSizePixels);
-        int newY = (int)(currentTile.GlobalCenter.Y / MapScaleManager.Instance.ScaledTileSizePixels);
+        int newX = (int)(currentTile.GlobalCenter.X / tileSize);
+        int newY = (int)(currentTile.GlobalCenter.Y / tileSize);
 
         int dx = Math.Abs(oldX - newX);
         int dy = Math.Abs(oldY - newY);
@@ -229,7 +236,8 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
     //}
     public HashSet<Tile> GetTrustedTiles()
     {
-      return new HashSet<Tile>(_drawnTiles.Values);
+      //return new HashSet<Tile>(_drawnTiles.Values);
+      return _trustedTiles;
     }
 
 

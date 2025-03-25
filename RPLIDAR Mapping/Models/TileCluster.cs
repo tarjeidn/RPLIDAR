@@ -39,7 +39,7 @@ namespace RPLIDAR_Mapping.Models
       PreviousCenter = new Vector2(Center.X, Center.Y);
       ComputeBoundingBox();
       ComputeClusterCenter();
-      //ComputeFeatureLine();
+      ComputeFeatureLine();
       float movementThreshold = 2.0f; // Ignore small movements
       HasMoved = Vector2.Distance(PreviousCenter, Center) > movementThreshold;
     }

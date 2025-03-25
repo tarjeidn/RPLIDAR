@@ -62,7 +62,8 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
       pointsHitAtThisTile = 0;
       IsDrawn = false;
       _selfGrid = grid;
-      _tileSize = _selfGrid.tileSize;
+      //_tileSize = _selfGrid.tileSize;
+      _tileSize = 10;
       //  Get the global position of the grid first
       Vector2 gridGlobalPosition = _selfGrid.GridPosition;
       //  Get the tile's position relative to the grid
@@ -110,9 +111,14 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
     {
       //  Ensure the tile position updates correctly
       Vector2 gridGlobalPosition = _selfGrid.GridPosition;
-      Vector2 tileLocalPosition = new Vector2(X * MapScaleManager.Instance.ScaledTileSizePixels, Y * MapScaleManager.Instance.ScaledTileSizePixels);
+      Vector2 tileLocalPosition = new Vector2(X * _tileSize, Y * _tileSize);
 
-      return gridGlobalPosition + tileLocalPosition + new Vector2(MapScaleManager.Instance.ScaledTileSizePixels / 2.0f, MapScaleManager.Instance.ScaledTileSizePixels / 2.0f);
+      return gridGlobalPosition + tileLocalPosition + new Vector2(_tileSize / 2.0f, _tileSize / 2.0f);
+
+
+      //  Vector2 tileLocalPosition = new Vector2(X * MapScaleManager.Instance.ScaledTileSizePixels, Y * MapScaleManager.Instance.ScaledTileSizePixels);
+
+      //  return gridGlobalPosition + tileLocalPosition + new Vector2(MapScaleManager.Instance.ScaledTileSizePixels / 2.0f, MapScaleManager.Instance.ScaledTileSizePixels / 2.0f);
     }
 
     public void Draw(SpriteBatch spriteBatch, Vector2 screenPos, Vector2 decivePos)
@@ -129,12 +135,17 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
       }
 
       Color tileColor = Color.Lerp(Color.Blue, Color.Red, intensity);
+      if (IsTrusted) tileColor = Color.Green;
+      int tileSize = MapScaleManager.Instance.ScaledTileSizePixels;
       if (ScreenRect == Rectangle.Empty)
       {
-        ScreenRect = new Rectangle((int)screenPos.X, (int)screenPos.Y, _tileSize, _tileSize);
+        ScreenRect = new Rectangle((int)screenPos.X, (int)screenPos.Y, tileSize, tileSize);
       }
       // Ensure proper tile scaling
-      int tileSize = MapScaleManager.Instance.ScaledTileSizePixels;
+
+
+
+
       // Draw red Sightline from tile using LiDAR Angle
       if (_lastLIDARpoint != null)
       {

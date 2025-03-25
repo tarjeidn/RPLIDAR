@@ -1,7 +1,9 @@
 ﻿using Microsoft.Xna.Framework;
 using Newtonsoft.Json;
+using RPLIDAR_Mapping.Features.Communications;
 using RPLIDAR_Mapping.Models;
 using RPLIDAR_Mapping.Providers;
+using SharpDX.MediaFoundation;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -79,7 +81,25 @@ namespace RPLIDAR_Mapping.Utilities
             float distance = float.Parse(values[1], CultureInfo.InvariantCulture);
             byte quality = byte.Parse(values[2]);
 
-            queue.Enqueue(new DataPoint(angle, distance, quality));
+            Device device = UtilityProvider.Device;
+            float angleRad = MathHelper.ToRadians(angle) + device._deviceOrientation;
+            int tilesize = 10;
+
+            Vector2 offset = new Vector2(
+                MathF.Cos(angleRad) * distance,
+                MathF.Sin(angleRad) * distance
+            );
+            Vector2 globalPos = device._devicePosition + offset;
+
+            // Correct tile position calculation
+            Vector2 eqTilePosition = new Vector2(
+                MathF.Floor(globalPos.X / tilesize) * tilesize,
+                MathF.Floor(globalPos.Y / tilesize) * tilesize
+            );
+            Vector2 eqTileGlobalCenter = eqTilePosition + new Vector2(tilesize / 2f, tilesize / 2f);
+
+            // Enqueue corrected datapoint
+            queue.Enqueue(new DataPoint(angle, distance, quality, globalPos, eqTilePosition, eqTileGlobalCenter));
           }
         }
 
@@ -89,6 +109,32 @@ namespace RPLIDAR_Mapping.Utilities
       {
         Debug.WriteLine($"Error parsing JSON LiDAR data: {ex.Message}");
       }
+    }
+    public static bool LineSegmentsIntersect(Vector2 p1, Vector2 p2, Vector2 p3, Vector2 p4, out Vector2 intersection)
+    {
+      intersection = Vector2.Zero;
+
+      float s1_x = p2.X - p1.X;
+      float s1_y = p2.Y - p1.Y;
+      float s2_x = p4.X - p3.X;
+      float s2_y = p4.Y - p3.Y;
+
+      float denominator = (-s2_x * s1_y + s1_x * s2_y);
+
+      if (denominator == 0)
+        return false;  // Parallel lines
+
+      float s = (-s1_y * (p1.X - p3.X) + s1_x * (p1.Y - p3.Y)) / denominator;
+      float t = (s2_x * (p1.Y - p3.Y) - s2_y * (p1.X - p3.X)) / denominator;
+
+      if (s >= 0 && s <= 1 && t >= 0 && t <= 1)
+      {
+        // Intersection detected
+        intersection = new Vector2(p1.X + (t * s1_x), p1.Y + (t * s1_y));
+        return true;
+      }
+
+      return false; // No intersection
     }
     public static void ProcessLidarBatchBinary(byte[] payload, ConcurrentQueue<DataPoint> queue)
     {
@@ -119,7 +165,26 @@ namespace RPLIDAR_Mapping.Utilities
         byte quality = payload[startIndex + 4];
         //Debug.WriteLine($"angled: {angle} distance: {distance} quality: {quality} ");
         // Enqueue parsed DataPoint into the queue
-        queue.Enqueue(new DataPoint(angle, distance, quality));
+        // Calculate global position
+        Device device = UtilityProvider.Device;
+        float angleRad = MathHelper.ToRadians(angle) + device._deviceOrientation;
+        int tilesize = 10;
+
+        Vector2 offset = new Vector2(
+            MathF.Cos(angleRad) * distance,
+            MathF.Sin(angleRad) * distance
+        );
+        Vector2 globalPos = device._devicePosition + offset;
+
+        // Correct tile position calculation
+        Vector2 eqTilePosition = new Vector2(
+            MathF.Floor(globalPos.X / tilesize) * tilesize,
+            MathF.Floor(globalPos.Y / tilesize) * tilesize
+        );
+        Vector2 eqTileGlobalCenter = eqTilePosition + new Vector2(tilesize / 2f, tilesize / 2f);
+
+        // Enqueue corrected datapoint
+        queue.Enqueue(new DataPoint(angle, distance, quality, globalPos, eqTilePosition, eqTileGlobalCenter));
       }
 
       

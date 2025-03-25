@@ -26,10 +26,10 @@ namespace RPLIDAR_Mapping.Features.Map.UI
 
     //  🔥 INVERTED SCALE: Larger values now represent a larger world area
     public int ScaledGridSizePixels => (int)(BaseGridSizePixels / ScaleFactor);
-
+    //public int ScaledGridSizePixels => 1000;
     //  🔥 NOW SCALES TILE SIZE AS SCALE INCREASES
     public int ScaledTileSizePixels => Math.Max((int)(BaseGridSizePixels / _baseTileCount), 3);
-
+    //public int ScaledTileSizePixels => 10;
     private MapScaleManager() { }
 
     //  Change scale factor (now inverted: larger scale means larger world area)

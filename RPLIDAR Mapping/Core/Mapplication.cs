@@ -112,6 +112,7 @@ namespace RPLIDAR_Mapping.Core
       ContentManagerProvider.LoadFont("DebugFont", "Fonts/Debug");
       _guiManager = new GuiManager(this);
       _device = new Device(_connectionParams, _guiManager);
+      UtilityProvider.Device = _device;
       AlgorithmProvider.TileMerge._device = _device;
       _inputManager = new InputManager(_device);
       _spriteBatch = GraphicsDeviceProvider.SpriteBatch;

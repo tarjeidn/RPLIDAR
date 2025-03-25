@@ -17,6 +17,7 @@ using RPLIDAR_Mapping.Features.Map.UI;
 using RPLIDAR_Mapping.Models;
 using RPLIDAR_Mapping.Providers;
 using RPLIDAR_Mapping.Utilities;
+using static RPLIDAR_Mapping.Features.Map.Algorithms.DevicePositionEstimator;
 
 
 
@@ -72,13 +73,15 @@ namespace RPLIDAR_Mapping.Features.Map
       public Vector2 DevicePosition;
       public float Angle;
       public float Distance;
+      public float Orientation;
 
-      public ObservationKey(Vector2 pos, float angle, float dist)
+      public ObservationKey(Vector2 pos, float angle, float dist, float orientation)
       {
         DevicePosition = pos;
         Angle = angle;
         Distance = dist;
-      }
+        Orientation = orientation;
+    }
 
       public override int GetHashCode()
       {
@@ -86,7 +89,8 @@ namespace RPLIDAR_Mapping.Features.Map
             (int)(DevicePosition.X / 10),  // bucket by 10mm
             (int)(DevicePosition.Y / 10),
             (int)(Angle * 2),              // bucket by 0.5°
-            (int)(Distance / 10)           // bucket by 10mm
+            (int)(Distance / 10),           // bucket by 10mm
+            (int)(Orientation * 10)
         );
       }
 
@@ -96,7 +100,8 @@ namespace RPLIDAR_Mapping.Features.Map
 
         return Vector2.Distance(DevicePosition, other.DevicePosition) < 10f && // within 10mm (1cm)
                Math.Abs(Angle - other.Angle) < 0.5f &&                         // within 0.5 degrees
-               Math.Abs(Distance - other.Distance) < 10f;                     // within 10mm (1cm)
+               Math.Abs(Distance - other.Distance) < 10f &&                     // within 10mm (1cm)
+               Math.Abs(Orientation - other.Orientation) < 0.5f;
       }
     }
 
@@ -128,8 +133,7 @@ namespace RPLIDAR_Mapping.Features.Map
       float deltaTime = (float)gameTime.ElapsedGameTime.TotalSeconds;
       IsUpdated = false;
       InputManager.Update(gameTime);
-
-      // ✅ Process new LiDAR points
+      // Process new LiDAR points
       if (dplist.Count > 0)
       {
         _pointsBuffer.AddRange(dplist);
@@ -150,57 +154,30 @@ namespace RPLIDAR_Mapping.Features.Map
           break;
         case MapUpdateState.UpdateDevicePosition:
           {
-            int matched, mismatched;
-            Vector2 currentDevicePos = _device._devicePosition;
-            Stopwatch sw = Stopwatch.StartNew();
-            Vector2? estimatedOffset = DevicePositionEstimator.EstimateOffset(
-                _pointsBuffer,
-                Map.ObservationLookup,
-                currentDevicePos,
-                MapScaleManager.Instance.ScaledTileSizePixels,
-                _gridManager,
-                out matched,
-                out mismatched
-            );
-            sw.Stop();
-            if (sw.ElapsedMilliseconds >  1) Debug.WriteLine($"⏱ Motion estimation took: {sw.ElapsedMilliseconds}ms");
-            float mismatchRatio = (matched == 0) ? 0 : (float)mismatched / matched;
-            //Debug.WriteLine($"[MotionEstimator] Matched: {matched}, Mismatched: {mismatched}, Ratio: {mismatchRatio}");
-
-            if (estimatedOffset.HasValue)
-            {
-              float smoothingFactor = 0.25f; // You can tweak this
-              Vector2 targetPosition = _device._devicePosition + estimatedOffset.Value;
-
-              _device._devicePosition = Vector2.Lerp(_device._devicePosition, targetPosition, smoothingFactor);
-
-              //_device._devicePosition += estimatedOffset.Value;
-              //Debug.WriteLine($"📍 Adjusted device position by {estimatedOffset.Value}");
-              //Debug.WriteLine($"📍 Adjusted device position  {_device._devicePosition}");
-              Map.ObservationLookup.Clear(); // start fresh from new position
-            }
-
+            /// TILEMATCHING
+            //DevicePositionEstimator.Update(_pointsBuffer, _gridManager);
+            /// ICP
+            //AlgorithmProvider.ICP.Update(_pointsBuffer, _gridManager); 
             _currentState = MapUpdateState.AddingNewPoints;
-            break;
           }
+          break;
+          
 
         case MapUpdateState.AddingNewPoints:
           NewTiles.Clear();
           AddPoints(_pointsBuffer);
           _tileMerge.CurrentState = TileMerge.MergeState.NewPointsAdded;
           _pointsBuffer.Clear();
-          _currentState = MapUpdateState.ComparingToPermanentLines;
+          _currentState = MapUpdateState.UpdatingTiles;
           break;
 
         case MapUpdateState.ComparingToPermanentLines:
-
-          //if(PermanentLines.Count > 0)AlgorithmProvider.DevicePositionEstimator.UpdateDevicePosition(); // ✅ Adjust device position based on matched tiles
           _currentState = MapUpdateState.UpdatingTiles;
           break;
 
         case MapUpdateState.UpdatingTiles:
-          //_tileMerge.Update();
-          _currentState = MapUpdateState.RunningTrustRegulator;
+          _tileMerge.Update();
+          //_currentState = MapUpdateState.RunningTrustRegulator;
           // 🔥 Wait until TileMerge is fully processed before continuing
           if (_tileMerge.CurrentState == TileMerge.MergeState.ReadyToDraw)
           {
@@ -225,51 +202,10 @@ namespace RPLIDAR_Mapping.Features.Map
           _currentState = MapUpdateState.Idle;
           break;
       }
-      //if (GUIProvider.UserSelection.isSelecting) IsUpdated = true;
       return IsUpdated;
     }
 
 
-    //public bool Update(List<DataPoint> dplist, GameTime gameTime)
-    //{
-    //  float deltaTime = (float)gameTime.ElapsedGameTime.TotalSeconds;
-    //  IsUpdated = false;
-
-    //  InputManager.Update(gameTime);
-    //  _tileMerge.Update();
-    //  if (dplist.Count > 0)
-    //  {
-    //    _pointsBuffer.AddRange(dplist);
-    //  }
-
-    //  if (_pointsBuffer.Count() > MinTileBufferSizeToAdd)
-    //  {
-    //    StatisticsProvider.MapStats.AddPointUpdates++;
-    //    StatisticsProvider.MapStats.UpdatesSincePointsAdded = 0;
-    //    _fpsCounter.IncrementLiDARUpdate();
-    //    AddPoints(dplist);
-    //    _tileMerge.CurrentState = TileMerge.MergeState.NewPointsAdded;
-    //    _Distributor.Update();
-
-    //    if (_tileTrustRegulator.RegulatorEnabled)
-    //    {
-    //      _tileTrustRegulator.Update(deltaTime);
-    //    }
-    //    IsUpdated = true;
-    //    _pointsBuffer.Clear();
-    //    //_mergeTilesFrameCounter = 0; // Reset counter since we received new points
-    //  }
-    //  _MapStats.AddToPointHistory(dplist.Count);
-    //  if (!IsUpdated) {
-    //    IdleFrames++;
-    //    if (IdleFrames == 60)
-    //    {
-    //      IsUpdated = true;
-    //      IdleFrames = 0;
-    //    }
-    //  }
-    //  return IsUpdated;
-    //}
     // Clears all added tiles
     public void ResetAllTiles()
     {
@@ -300,23 +236,30 @@ namespace RPLIDAR_Mapping.Features.Map
       {
         if (dp.Quality >= _minPointQuality && dp.Distance >= _minPointDistance)
         {
-          float pointAngleRadians = MathHelper.ToRadians(dp.Angle);
+          float rawRadians = MathHelper.ToRadians(dp.Angle);
 
-          // **🔥 Apply device rotation to LiDAR point**
-          float adjustedAngle = pointAngleRadians - deviceRotationRadians;
 
-          float distance = dp.Distance;
+          float adjustedAngle = rawRadians + deviceRotationRadians;
 
-          // 🔥 Rotate the relative position based on the device's rotation
-          float relativeX = distance * (float)Math.Cos(adjustedAngle);
-          float relativeY = distance * (float)Math.Sin(adjustedAngle);
+          // Keep the original position at the time of the hit
+          Vector2 devicePosAtHit = new Vector2(_device._devicePosition.X, _device._devicePosition.Y);
 
-          // Convert to global coordinates
-          float globalX = _device._devicePosition.X + relativeX;
-          float globalY = _device._devicePosition.Y + relativeY;
+          // Polar to Cartesian (in world space)
+          float relativeX = dp.Distance * MathF.Cos(adjustedAngle);
+          float relativeY = dp.Distance * MathF.Sin(adjustedAngle);
+          float globalX = devicePosAtHit.X + relativeX;
+          float globalY = devicePosAtHit.Y + relativeY;
 
-          // Store the transformed values in MapPoint
-          MapPoint mapPoint = new MapPoint(relativeX, relativeY, dp.Angle, distance, adjustedAngle, dp.Quality, globalX, globalY);
+          // Create MapPoint with both raw and adjusted angles
+          MapPoint mapPoint = new MapPoint(
+              relativeX, relativeY,
+              dp.Angle, dp.Distance,
+              adjustedAngle, rawRadians,
+              dp.Quality,
+              globalX, globalY,
+              devicePosAtHit,
+              deviceRotationRadians
+          );
           addedPoints.Add(mapPoint);
         }
       }

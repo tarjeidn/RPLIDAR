@@ -19,6 +19,7 @@ namespace RPLIDAR_Mapping.Models
     public float AngleRadians { get; set; }
     public bool IsPermanent { get; set; } = false;
     public bool IsInferred { get; set; } = false; // For inferred lines
+    public float Length => Vector2.Distance(Start, End);
 
     public LineSegment(Vector2 start, Vector2 end, float angleDegrees, float angleRadians, bool isPermanent)
     {

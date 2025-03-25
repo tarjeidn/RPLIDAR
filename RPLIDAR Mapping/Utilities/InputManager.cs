@@ -20,6 +20,7 @@ namespace RPLIDAR_Mapping.Utilities
     private const double CooldownTime = 500; // 500ms cooldown for each key
     private Device _device;
     private UserSelection _UserSelection;
+    private MouseState _previousMouseState;
 
     public InputManager(Device device)
     {
@@ -39,7 +40,20 @@ namespace RPLIDAR_Mapping.Utilities
     private void HandleMouse()
     {
       MouseState mouse = Mouse.GetState();
+      KeyboardState keyboard = Keyboard.GetState();
 
+      bool ctrlHeld = keyboard.IsKeyDown(Keys.LeftControl) || keyboard.IsKeyDown(Keys.RightControl);
+
+
+      if (mouse.LeftButton == ButtonState.Pressed && _previousMouseState.LeftButton == ButtonState.Released)
+      {
+        if (ImGui.IsAnyItemHovered() || ImGui.IsAnyItemActive())
+          return; // Prevent clicking through UI
+
+        Vector2 mouseWorldPos = UtilityProvider.Camera.ScreenToWorld(new Vector2(mouse.X, mouse.Y));
+
+        _UserSelection.SelectClusterAtPosition(mouseWorldPos, ctrlHeld);
+      }
       if (mouse.LeftButton == ButtonState.Pressed)
       {
         if (!_UserSelection.isSelecting)
@@ -59,8 +73,9 @@ namespace RPLIDAR_Mapping.Utilities
       {
         // Finish selection
         _UserSelection.isSelecting = false;
-        _UserSelection.HighlightLinesInSelection();
+        _UserSelection.HighlightClustersInSelection(ctrlHeld);
       }
+      _previousMouseState = mouse;
     }
 
     private void HandleKeyBoard(double currentTime)

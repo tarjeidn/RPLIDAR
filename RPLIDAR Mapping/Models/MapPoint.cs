@@ -17,9 +17,14 @@ namespace RPLIDAR_Mapping.Models
     public readonly float Radians;
     public readonly float GlobalX;
     public readonly float GlobalY;
+    public readonly float RawAngleDegrees;
+    public readonly float RawAngleRadians;
+    public readonly float DeviceOrientation;
+    public readonly Vector2 DevicePosition;
     public byte Quality;
 
-    public MapPoint(float x, float y, float angle, float distance, float radians, byte quality, float globalX, float globalY)
+    public MapPoint(float x, float y, float angle, float distance, float radians, float rawRadians, 
+      byte quality, float globalX, float globalY, Vector2 devicePosition, float deviceOrientation)
     {
       X = x;
       Y = y;
@@ -29,6 +34,9 @@ namespace RPLIDAR_Mapping.Models
       Quality = quality;
       GlobalX = globalX;
       GlobalY = globalY;
+      RawAngleRadians = rawRadians;
+      DeviceOrientation = deviceOrientation;
+      this.DevicePosition = new Vector2(devicePosition.X, devicePosition.Y);
     }
   }
 

@@ -14,11 +14,13 @@ namespace RPLIDAR_Mapping.Providers
     public static DevicePositionEstimator DevicePositionEstimator { get; set; }
     public static TileTrustRegulator TileTrustRegulator { get; private set; }
     public static TileMerge TileMerge { get; private set; }
+    public static ICP ICP { get; private set; }
     public static void Initialize()
     {
       TileTrustRegulator = new TileTrustRegulator();
       TileMerge = new TileMerge();
       DevicePositionEstimator = new DevicePositionEstimator();
+      ICP = new ICP(maxMatchDistance: 20f, convergenceThreshold: 0.5f, maxIterations: 5);
     }
   }
 }

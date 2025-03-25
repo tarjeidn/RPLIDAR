@@ -33,7 +33,8 @@ namespace RPLIDAR_Mapping.Features.Map.UI
       MapWidth = (int)(ScreenWidth * 0.6);
       MapHeight = (int)(ScreenHeight * 0.8);
 
-      _gridSize = MapScaleManager.Instance.ScaledGridSizePixels;
+      //_gridSize = MapScaleManager.Instance.ScaledGridSizePixels;
+      _gridSize = 1000;
     }
 
     ////  Update zoom from GUI slider
@@ -65,20 +66,6 @@ namespace RPLIDAR_Mapping.Features.Map.UI
       Vector2 scaledOffset = zoomedOffset / scale; // Scale after zoom
       return screenCenter + scaledOffset;
     }
-    //public Vector2 WorldToScreen(Vector2 worldPosition)
-    //{
-    //  Vector2 screenCenter = GetDestinationRectangle().Center.ToVector2();
-    //  float scale = MapScaleManager.Instance.ScaleFactor;
-
-    //  // **Apply Rotation Correction**
-    //  Vector2 rotatedOffset = RotatePoint(worldPosition - Position, -_device._deviceOrientation); // 🔄 Apply rotation
-
-    //  Vector2 baseOffset = rotatedOffset; // Distance from camera position
-    //  Vector2 zoomedOffset = baseOffset * (1f / Zoom); // Apply zoom before scaling
-    //  Vector2 scaledOffset = zoomedOffset / scale; // Scale after zoom
-
-    //  return screenCenter + scaledOffset;
-    //}
 
     public Rectangle WorldToScreen(Rectangle worldRect)
     {
@@ -106,21 +93,6 @@ namespace RPLIDAR_Mapping.Features.Map.UI
 
       return worldPosition;
     }
-    //public Vector2 ScreenToWorld(Vector2 screenPosition)
-    //{
-    //  Vector2 screenCenter = GetDestinationRectangle().Center.ToVector2();
-    //  float scale = MapScaleManager.Instance.ScaleFactor;
-    //  float adjustedZoom = Zoom * scale;
-
-    //  Vector2 scaledOffset = (screenPosition - screenCenter) * scale;
-    //  Vector2 zoomedOffset = scaledOffset * Zoom;
-
-    //  // **Apply Reverse Rotation**
-    //  Vector2 worldOffset = RotatePoint(zoomedOffset, _device._deviceOrientation); // 🔄 Reverse rotation
-
-    //  return Position + worldOffset;
-    //}
-
 
     public Rectangle ScreenToWorld(Rectangle screenRect)
     {

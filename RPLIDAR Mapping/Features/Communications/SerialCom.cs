@@ -350,57 +350,57 @@ namespace RPLIDAR_Mapping.Features.Communications
 
 
 
-    private void ProcessSerialData(string data)
-    {
-      try
-      {
-        if (data.Contains("Status") || data.Contains("State"))
-        {
-          Log(data);
-          return;
-        }
-        if (data.Contains("State"))
-        {
-          UpdateState(data);
-          return;
-        }
-        if (data.Contains("VMDPE"))
-        {
-          Log($"Ignoring diagnostic data: {data}");
-          return;
-        }
-        if (!IsValidLiDARData(data))
-        {
-          Log($"Invalid data format: {data}");
-          return;
-        }
-        if (_state == LiDARState.PAUSED)
-        {
-          return;
-        }
-        string[] parts = data.Split(',');
-        Log(data);
-        if (parts.Length == 3)
-        {
-          float angle = float.Parse(parts[0], CultureInfo.InvariantCulture);
-          float distance = float.Parse(parts[1], CultureInfo.InvariantCulture);
-          byte quality = byte.Parse(parts[2], CultureInfo.InvariantCulture);
+    //private void ProcessSerialData(string data)
+    //{
+    //  try
+    //  {
+    //    if (data.Contains("Status") || data.Contains("State"))
+    //    {
+    //      Log(data);
+    //      return;
+    //    }
+    //    if (data.Contains("State"))
+    //    {
+    //      UpdateState(data);
+    //      return;
+    //    }
+    //    if (data.Contains("VMDPE"))
+    //    {
+    //      Log($"Ignoring diagnostic data: {data}");
+    //      return;
+    //    }
+    //    if (!IsValidLiDARData(data))
+    //    {
+    //      Log($"Invalid data format: {data}");
+    //      return;
+    //    }
+    //    if (_state == LiDARState.PAUSED)
+    //    {
+    //      return;
+    //    }
+    //    string[] parts = data.Split(',');
+    //    Log(data);
+    //    if (parts.Length == 3)
+    //    {
+    //      float angle = float.Parse(parts[0], CultureInfo.InvariantCulture);
+    //      float distance = float.Parse(parts[1], CultureInfo.InvariantCulture);
+    //      byte quality = byte.Parse(parts[2], CultureInfo.InvariantCulture);
 
-          // Enqueue a new DataPoint
+    //      // Enqueue a new DataPoint
           
-          _dataQueue.Enqueue(new DataPoint(angle, distance, quality));
-          Log($"Queue Size: {_dataQueue.Count}");
-        }
-        else
-        {
-          Log($"Invalid data format: {data}");
-        }
-      }
-      catch (Exception ex)
-      {
-        Log($"Error in ProcessSerialData: {ex.Message}");
-      }
-    }
+    //      _dataQueue.Enqueue(new DataPoint(angle, distance, quality));
+    //      Log($"Queue Size: {_dataQueue.Count}");
+    //    }
+    //    else
+    //    {
+    //      Log($"Invalid data format: {data}");
+    //    }
+    //  }
+    //  catch (Exception ex)
+    //  {
+    //    Log($"Error in ProcessSerialData: {ex.Message}");
+    //  }
+    //}
 
     private bool IsValidLiDARData(string data)
     {

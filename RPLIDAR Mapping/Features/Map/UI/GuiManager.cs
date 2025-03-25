@@ -174,6 +174,10 @@ public class GuiManager
       {
         UserSelection.MergeSelectedLinesIntoWalls();
       }
+      if (ImGui.Button("Smooth Premanent Lines"))
+      {
+        UserSelection.SmoothPermanentLines();
+      }
     }
 
     float zoom = MapScaleManager.Instance.MapZoomFactor;

@@ -15,6 +15,7 @@ namespace RPLIDAR_Mapping.Providers
   {
     public static FPSCounter FPSCounter { get; set; }
     public static Camera Camera { get; set; }
+    public static Device Device { get; set; }
 
     public static void Initialize(GraphicsDevice gd)
     {

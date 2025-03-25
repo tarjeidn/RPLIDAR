@@ -85,7 +85,8 @@ namespace RPLIDAR_Mapping.Features.Map
     {
 
       Camera camera = UtilityProvider.Camera;
-      int scaledGridSize = MapScaleManager.Instance.ScaledGridSizePixels;
+      //int scaledGridSize = MapScaleManager.Instance.ScaledGridSizePixels;
+      int scaledGridSize = 1000;
       Rectangle sourceBounds = camera.GetSourceRectangle();
 
       for (int i = 0; i < gridsDrawn; i++)
@@ -206,7 +207,7 @@ namespace RPLIDAR_Mapping.Features.Map
         if (DrawingHelperFunctions.ClipLineToRectangle(ref start, ref end, sourceBounds))
         {
           updatedLines.Add(new LineSegment(start, end, line.AngleDegrees, line.AngleRadians, line.IsPermanent));
-
+          
           Vector2 screenStart = _Camera.WorldToScreen(start);
           Vector2 screenEnd = _Camera.WorldToScreen(end);
           DrawingHelperFunctions.DrawLine(_SpriteBatch, screenStart, screenEnd, Color.Green, 5);
@@ -248,6 +249,12 @@ namespace RPLIDAR_Mapping.Features.Map
 
       // Draw line indicating direction
       DrawingHelperFunctions.DrawLine(_SpriteBatch, deviceScreenPos, endPoint, Color.Green, 3);
+      _SpriteBatch.DrawString(
+          ContentManagerProvider.GetFont("DebugFont"),
+          $"T: {MathHelper.ToDegrees(_device._deviceOrientation):0.00} POS: {_device._devicePosition}",
+          deviceScreenPos + new Vector2(10, -20),
+          Color.White
+      );
     }
     private void DrawTilesCanvas()
     {
@@ -338,10 +345,10 @@ namespace RPLIDAR_Mapping.Features.Map
 
       foreach (Tile tile in grid._drawnTiles.Values)
       {
-        if (tile.TrustedScore < AlgorithmProvider.TileTrustRegulator.TileTrustTreshHold)
-        {
-          continue; //  Skip untrusted tiles
-        }
+        //if (tile.TrustedScore < AlgorithmProvider.TileTrustRegulator.TileTrustTreshHold)
+        //{
+        //  continue; //  Skip untrusted tiles
+        //}
 
         Vector2 worldPos = tile.WorldGlobalPosition;
         Vector2 screenPos = camera.WorldToScreen(worldPos);
@@ -357,15 +364,19 @@ namespace RPLIDAR_Mapping.Features.Map
     }
     private void DrawMergedLines(Rectangle sourceBounds)
     {
-      if (_TileMerge._mergedLines == null || _TileMerge._mergedLines.Count == 0) return;
+      //if (_TileMerge._mergedLines == null || _TileMerge._mergedLines.Count == 0) return;
+      if (_TileMerge.TileClusters.Count == 0) return;
 
       Camera camera = UtilityProvider.Camera;
 
 
       List<LineSegment> updatedLines = new();
 
-      foreach (var line in _TileMerge._mergedLines)
+      //foreach (var line in _TileMerge._mergedLines)
+      foreach (var cluster in _TileMerge.TileClusters)
       {
+        if (cluster.FeatureLine == null) continue;
+        LineSegment line = cluster.FeatureLine;
         Vector2 start = line.Start;
         Vector2 end = line.End;
 

@@ -39,9 +39,11 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
       GridStats = new GridStats(this);
       InitializeGrids();
       Grid template = Grids[(0, 0)];
-      tileSize = MapScaleManager.Instance.ScaledTileSizePixels;
+      //tileSize = MapScaleManager.Instance.ScaledTileSizePixels;
+      tileSize = 10;
       _gridSizeM = MapScaleManager.Instance.GridAreaMeters;
-      _gridSizePixels = MapScaleManager.Instance.ScaledGridSizePixels;
+      //_gridSizePixels = MapScaleManager.Instance.ScaledGridSizePixels;
+      _gridSizePixels = 1000;
 
       GridScaleFactor = MapScaleManager.Instance.ScaleFactor;
 
@@ -95,8 +97,10 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
       foreach (MapPoint point in points)
       {
         //  Use dynamically scaled grid size
-        float scaledGridSize = MapScaleManager.Instance.ScaledGridSizePixels;
-        float scaledTileSize = MapScaleManager.Instance.ScaledTileSizePixels;
+        float scaledGridSize = 1000;
+        float scaledTileSize = 10;
+        //float scaledGridSize = MapScaleManager.Instance.ScaledGridSizePixels;
+        //float scaledTileSize = MapScaleManager.Instance.ScaledTileSizePixels;
 
         //  Compute correct grid index based on global position
         int gridX = (int)Math.Floor(point.GlobalX / scaledGridSize);
@@ -123,9 +127,10 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
     }
     public Tile GetTileAtGlobalCoordinates(float globalX, float globalY)
     {
-      float scaledGridSize = MapScaleManager.Instance.ScaledGridSizePixels;
-      float scaledTileSize = MapScaleManager.Instance.ScaledTileSizePixels;
-
+      //float scaledGridSize = MapScaleManager.Instance.ScaledGridSizePixels;
+      //float scaledTileSize = MapScaleManager.Instance.ScaledTileSizePixels;
+      float scaledGridSize = 1000;
+      float scaledTileSize = 10;
       int gridX = (int)Math.Floor(globalX / scaledGridSize);
       int gridY = (int)Math.Floor(globalY / scaledGridSize);
 
