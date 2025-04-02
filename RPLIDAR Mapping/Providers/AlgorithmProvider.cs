@@ -20,7 +20,7 @@ namespace RPLIDAR_Mapping.Providers
       TileTrustRegulator = new TileTrustRegulator();
       TileMerge = new TileMerge();
       DevicePositionEstimator = new DevicePositionEstimator();
-      ICP = new ICP(maxMatchDistance: 20f, convergenceThreshold: 0.5f, maxIterations: 5);
+      ICP = new ICP();
     }
   }
 }

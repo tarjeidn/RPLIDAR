@@ -17,6 +17,7 @@ using RPLIDAR_Mapping.Features.Map.UI;
 using RPLIDAR_Mapping.Models;
 using RPLIDAR_Mapping.Providers;
 using RPLIDAR_Mapping.Utilities;
+
 using static RPLIDAR_Mapping.Features.Map.Algorithms.DevicePositionEstimator;
 
 
@@ -41,21 +42,25 @@ namespace RPLIDAR_Mapping.Features.Map
     //public List<(Vector2 Start, Vector2 End, float AngleDegrees, float AngleRadians, bool IsPermanent)> PermanentLines = new();
     public List<LineSegment> PermanentLines = new();
     public HashSet<Tile> NewTiles { get; set; } = new();
+    public List<(Vector2 from, Vector2 to)> MatchedPairs { get; set; } = new();
+    private List<DataPoint> _lastScanPoints = new();
+
     public bool _pointsAdded {  get; private set; }
     public int MatchedTileCount = 0;
     public int MismatchedTileCount = 0;
 
+
     private int _mergeTilesFrameCounter;
     public GridManager _gridManager { get; set; }
 
-
     public float GridScaleFactor { get; set; }
     public bool MapUpdated = false;
-    public int _minPointQuality;
-    public float _minPointDistance;
+    public int _minPointQuality = 5;
+    public float _minPointDistance = 160;
+    public int MaxAcceptableDistance = 3000;
     bool IsUpdated = false;
     private int IdleFrames = 0;
-    public int MinTileBufferSizeToAdd { get; set; } = 0;
+    public int MinTileBufferSizeToAdd { get; set; } = 50;
     public enum MapUpdateState
     {
       Idle,
@@ -114,8 +119,6 @@ namespace RPLIDAR_Mapping.Features.Map
       _tileTrustRegulator = AlgorithmProvider.TileTrustRegulator;
       _tileMerge = AlgorithmProvider.TileMerge;
       _tileMerge._map = this;
-      _minPointDistance = _tileMerge.MinPointDistance;
-      _minPointQuality = _tileMerge.MinPointQuality;
       _mergeTilesFrameCounter = 0;
       _fpsCounter = UtilityProvider.FPSCounter;
       _MapStats = new MapStats();
@@ -142,7 +145,7 @@ namespace RPLIDAR_Mapping.Features.Map
       switch (_currentState)
       {
         case MapUpdateState.Idle:
-          if (_pointsBuffer.Count > MinTileBufferSizeToAdd)
+          if (_pointsBuffer.Count >= MinTileBufferSizeToAdd)
           {
             StatisticsProvider.MapStats.AddPointUpdates++;
             StatisticsProvider.MapStats.UpdatesSincePointsAdded = 0;
@@ -154,10 +157,23 @@ namespace RPLIDAR_Mapping.Features.Map
           break;
         case MapUpdateState.UpdateDevicePosition:
           {
+
+
+            // Estimate offset ONLY when we have enough angle coverage
+            Vector2 estimatedOffset = Vector2.Zero;
+            (estimatedOffset, List<(Vector2 from, Vector2 to)> matchedPairs) = AlgorithmProvider.ICP.Run(_pointsBuffer, GetPermanentTiles());
+            //(estimatedOffset, List<(Vector2 from, Vector2 to)> matchedPairs) = AlgorithmProvider.ICP.Run(_pointsBuffer, _gridManager.GetAllTrustedTiles());
+
+
+
+            _device._devicePosition += estimatedOffset;
+            MatchedPairs = matchedPairs;
+            Debug.WriteLine($"🧭 Device Pos: {_device._devicePosition}");
+
             /// TILEMATCHING
             //DevicePositionEstimator.Update(_pointsBuffer, _gridManager);
             /// ICP
-            //AlgorithmProvider.ICP.Update(_pointsBuffer, _gridManager); 
+            //AlgorithmProvider.ICP.Update(_pointsBuffer, _tileMerge.TileClusters); 
             _currentState = MapUpdateState.AddingNewPoints;
           }
           break;
@@ -204,17 +220,70 @@ namespace RPLIDAR_Mapping.Features.Map
       }
       return IsUpdated;
     }
-
-
-    // Clears all added tiles
-    public void ResetAllTiles()
+    public (Vector2 offset, List<(Vector2 from, Vector2 to)> matches) EstimateOffsetFromTrustedTiles(List<DataPoint> currentPoints, HashSet<Tile> trustedTiles)
     {
-      foreach (var grid in _Distributor._GridManager.Grids.Values)
+      List<(Vector2 scanPoint, Vector2 tileCenter)> matchedPairs = new();
+      float matchRadius = 10f;
+
+      foreach (var point in currentPoints)
       {
-        grid.ResetTiles();
+        // Get the global position where this beam thinks it hits
+        float angleRad = MathHelper.ToRadians(point.Angle + point.Yaw);
+        Vector2 estimatedHit = _device._devicePosition + new Vector2(
+            MathF.Cos(angleRad) * point.Distance,
+            MathF.Sin(angleRad) * point.Distance
+        );
+
+        // Try to find the closest trusted tile within matchRadius
+        Tile? match = trustedTiles
+            .FirstOrDefault(t => Vector2.DistanceSquared(t.GlobalCenter, estimatedHit) <= matchRadius * matchRadius);
+
+        if (match != null)
+        {
+          matchedPairs.Add((estimatedHit, match.GlobalCenter));
+          Debug.WriteLine($"🔍 Match → Beam @ {point.Angle:F1}° → Δ: {match.GlobalCenter - estimatedHit}");
+        }
       }
-      _tileMerge.ClearMergedObjects();
+
+      if (matchedPairs.Count < 5)
+      {
+        Debug.WriteLine($"⚠ Not enough matched tiles ({matchedPairs.Count}) to estimate offset.");
+        return (Vector2.Zero, matchedPairs);
+      }
+
+      // Calculate centroids
+      Vector2 scanSum = Vector2.Zero;
+      Vector2 tileSum = Vector2.Zero;
+      foreach (var (scan, tile) in matchedPairs)
+      {
+        scanSum += scan;
+        tileSum += tile;
+      }
+
+      Vector2 scanCenter = scanSum / matchedPairs.Count;
+      Vector2 tileCenter = tileSum / matchedPairs.Count;
+
+      Vector2 offset = tileCenter - scanCenter;
+      Debug.WriteLine($"📌 Estimated Offset from Tiles: {offset} from {matchedPairs.Count} matches");
+      return (offset, matchedPairs);
     }
+
+    public HashSet<Tile> GetPermanentTiles()
+    {
+      HashSet<Tile> allPermanentTiles = new();
+        foreach (LineSegment line in PermanentLines)      
+        {
+        if (line == null) continue;
+          allPermanentTiles.UnionWith(line.ParentCluster.Tiles);
+        }
+        return allPermanentTiles;
+    }
+
+
+
+
+
+
     public void resetAllGrids()
     {
       _gridManager.Grids.Clear();
@@ -227,30 +296,34 @@ namespace RPLIDAR_Mapping.Features.Map
     }
     public void AddPoints(List<DataPoint> dplist)
     {
+      Rectangle sourceRect = UtilityProvider.Camera.GetSourceRectangle();
       List<MapPoint> addedPoints = new List<MapPoint>(dplist.Count);
+      var sortedList = dplist.OrderBy(dp => dp.TimeStamp).ToList();
 
-      //float deviceRotationRadians = MathHelper.ToRadians(_device._deviceOrientation); // 🔥 Convert device rotation to radians
-      float deviceRotationRadians = _device._deviceOrientation;
-
-      foreach (DataPoint dp in dplist)
+      foreach (DataPoint dp in sortedList)
       {
-        if (dp.Quality >= _minPointQuality && dp.Distance >= _minPointDistance)
+        if (dp.Quality >= _minPointQuality && dp.Distance >= _minPointDistance && dp.Distance <= MaxAcceptableDistance)
         {
+          float yawRadians = MathHelper.ToRadians(dp.Yaw);
           float rawRadians = MathHelper.ToRadians(dp.Angle);
 
+          // Use IMU yaw as device orientation
+          _device._deviceOrientation = yawRadians;
 
-          float adjustedAngle = rawRadians + deviceRotationRadians;
+          float adjustedAngle = rawRadians + yawRadians;
 
-          // Keep the original position at the time of the hit
-          Vector2 devicePosAtHit = new Vector2(_device._devicePosition.X, _device._devicePosition.Y);
+          // Apply current (updated) device position to this point
+          Vector2 devicePosAtHit = _device._devicePosition;
 
-          // Polar to Cartesian (in world space)
           float relativeX = dp.Distance * MathF.Cos(adjustedAngle);
           float relativeY = dp.Distance * MathF.Sin(adjustedAngle);
           float globalX = devicePosAtHit.X + relativeX;
           float globalY = devicePosAtHit.Y + relativeY;
 
-          // Create MapPoint with both raw and adjusted angles
+          Vector2 screenpos = UtilityProvider.Camera.WorldToScreen(new Vector2(globalX, globalY));
+          if (!sourceRect.Contains(screenpos))
+            continue;
+
           MapPoint mapPoint = new MapPoint(
               relativeX, relativeY,
               dp.Angle, dp.Distance,
@@ -258,8 +331,9 @@ namespace RPLIDAR_Mapping.Features.Map
               dp.Quality,
               globalX, globalY,
               devicePosAtHit,
-              deviceRotationRadians
+              yawRadians
           );
+
           addedPoints.Add(mapPoint);
         }
       }
@@ -267,44 +341,6 @@ namespace RPLIDAR_Mapping.Features.Map
       _Distributor.Distribute(addedPoints);
     }
 
-    //public void AddPoints(List<DataPoint> dplist)
-    //{
-    //  List<MapPoint> addedPoints = new List<MapPoint>(dplist.Count);
-
-    //  foreach (DataPoint dp in dplist)
-    //  {
-    //    if (dp.Quality >= _minPointQuality && dp.Distance >= _minPointDistance)
-    //    {
-    //      float radians = MathHelper.ToRadians(dp.Angle);
-    //      float distance = dp.Distance;
-
-
-    //      // Relative positions, from the viewpoint of the device. 
-    //      float relativeX = distance * (float)Math.Cos(radians);
-    //      float relativeY = distance * (float)Math.Sin(radians);
-
-    //      // Global coordinates 
-    //      float globalX = (_device._devicePosition.X) + relativeX;
-    //      float globalY = (_device._devicePosition.Y) + relativeY;
-
-    //      //  Store only scaled values in MapPoint
-    //      MapPoint mapPoint = new MapPoint(relativeX, relativeY, dp.Angle, distance, radians, dp.Quality, globalX, globalY);
-    //      addedPoints.Add(mapPoint);
-    //    }
-    //  }
-
-    //  _Distributor.Distribute(addedPoints);
-    //}
-
-
-
-
-
-    public List<MapPoint> GetPoints()
-    {
-      // Return a copy of the points list to avoid modification outside
-      return new List<MapPoint>(_points);
-    }
 
 
   }

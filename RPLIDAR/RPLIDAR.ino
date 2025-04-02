@@ -1,11 +1,17 @@
-﻿#include <FlashAsEEPROM.h>
-#include <FlashStorage.h>
+﻿
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
 #include <ArduinoJson.hpp>
 #include <RPLidar.h>
 #include <WiFiNINA.h>
 #include <stdint.h> 
+#include <Wire.h>
+#include <Adafruit_Sensor.h>
+#include <Adafruit_BNO055.h>
+#include <utility/imumaths.h>
+
+Adafruit_BNO055 bno = Adafruit_BNO055(55);
+
 
 #define EEPROM_SSID_ADDR 0          //  Start address for SSID
 #define EEPROM_PASS_ADDR 32         //  Start address for Password
@@ -21,15 +27,32 @@ enum class State {
   RUNNING, // LiDAR active
   PAUSED   // LiDAR paused
 };
-#define MAX_BATCH_SIZE 100  //  Define max batch size to prevent overflow
+
 struct WiFiSettings {
   char ssid[32];
   char password[64];
 };
-
-
+struct Vec2 {
+  float x;
+  float y;
+};
 WiFiServer server(80);
-FlashStorage(wifiConfig, WiFiSettings);
+
+const char* apSSID = "lidar";
+const char* apPassword = "123";
+
+float _yawOffset = 0;
+unsigned long lastVelocitySentTime = 0;
+unsigned long lastTime = 0;
+const float motionThreshold = 0.15f; // Threshold to detect real motion
+static unsigned long lastMotionTime = 0;
+const unsigned long velocitySendInterval = 200; // send every 200ms
+Vec2 velocity = { 0.0f, 0.0f };
+const int velocitySmoothingWindow = 5; // adjust for smoothness vs lag
+float vxHistory[velocitySmoothingWindow] = { 0 };
+float vyHistory[velocitySmoothingWindow] = { 0 };
+int velocityHistoryIndex = 0;
+//FlashStorage(wifiConfig, WiFiSettings);
 
 WiFiSettings settings;
 bool wifiConfigured = false;
@@ -59,7 +82,8 @@ const int mqttPort = 1883;
 const char* dataTopic = "lidar/data";       // Topic for publishing LiDAR data
 const char* commandTopic = "lidar/commands"; // Topic for receiving commands
 const char* statusTopic = "lidar/status";
-int batchSize = 45;  //  Tune this for better performance
+
+int motorSpeed = 200;
 //String dataBatch[batchSize];
 String mode = "";
 
@@ -70,15 +94,30 @@ int batchIndex = 0;
 //JSON data: batchsize 10
 //byte data (7): batchsize 30
 //byte data(5) : batchsize 45
+#define MAX_BATCH_SIZE 100  //  Define max batch size to prevent overflow
+#pragma pack(push, 1)  // Ensure 1-byte memory alignment
 
-#pragma pack(push, 1)  //  Ensure 1-byte memory alignment
 struct LidarPoint {
-  uint16_t angle;    //  2 bytes (was 4 as float)
-  uint16_t distance; //  2 bytes (was 4 as int)
-  byte quality;     //  1 byte
+  uint16_t angle;      // 2 bytes
+  uint16_t distance;   // 2 bytes
+  byte quality;        // 1 byte
+  uint16_t yaw;        // 2 bytes (0–360° → stored as degrees × 100)
+  //float vx;          // 4 bytes velocity X * 1000
+  //float vy;          // 4 bytes velocity Y * 1000
+  uint32_t timestamp;  // 4 bytes
 };
 #pragma pack(pop)
+#pragma pack(push, 1)
+struct IMUVelocityPacket {
+  uint32_t timestamp;    // 4 bytes
+  float vx;            // velocity X * 1000
+  float vy;            // velocity Y * 1000
+};
+#pragma pack(pop)
+
+int batchSize = 50;  //  Tune this for better performance
 LidarPoint lidarPoints[MAX_BATCH_SIZE];
+byte payload[(MAX_BATCH_SIZE * sizeof(LidarPoint)) + 4];
 
 void handleCommand(String command, String com) {
   String message = "Received command from " + com + " protocol";
@@ -113,8 +152,8 @@ void handleCommand(String command, String com) {
   }
   else if (command == "s") { // Start command
     resetLidar();
-    analogWrite(RPLIDAR_MOTOR, 200); // 5 RPM
-    delay(1000);                    // Allow motor to stabilize
+    analogWrite(RPLIDAR_MOTOR, motorSpeed); // 5 RPM (200 = 5 RPM)
+    delay(500);                    // Allow motor to stabilize
     u_result result = lidar.startScan();
     if (IS_OK(result)) {
       currentState = State::RUNNING;
@@ -126,7 +165,7 @@ void handleCommand(String command, String com) {
       SendStatusMessage(result, HEX);
       currentState = State::IDLE;
       analogWrite(RPLIDAR_MOTOR, 0);
-      SendStatusMessage("Failed to start LiDAR.");
+
     }
     SendState();
   }
@@ -303,7 +342,7 @@ void connectMQTT() {
 void resetLidar() {
   Serial.println("Resetting LiDAR...");
   lidar.stop(); // Stop any previous operation
-  delay(2000);   // Allow some time for the LiDAR to stabilize
+  delay(1000);   // Allow some time for the LiDAR to stabilize
 }
 bool checkSerialConnection() {
   Serial.begin(115200);
@@ -372,7 +411,7 @@ void waitForWiFiConfig() {
           newPassword = input.substring(commaIndex + 1);
 
           Serial.println("Received New WiFi Credentials!");
-          saveWiFiSettings(newSSID.c_str(), newPassword.c_str());
+          //saveWiFiSettings(newSSID.c_str(), newPassword.c_str());
 
           Serial.println("Restarting to apply new settings...");
           delay(2000);
@@ -388,46 +427,46 @@ void waitForWiFiConfig() {
     delay(100);
   }
 }
-void saveWiFiSettings(const char* newSSID, const char* newPassword) {
-  Serial.println("Saving WiFi credentials to EEPROM...");
-
-  //  Write SSID
-  for (int i = 0; i < MAX_SSID_LENGTH; i++) {
-    EEPROM.write(EEPROM_SSID_ADDR + i, newSSID[i]);
-    if (newSSID[i] == '\0') break;  // Stop at null terminator
-  }
-
-  //  Write Password
-  for (int i = 0; i < MAX_PASS_LENGTH; i++) {
-    EEPROM.write(EEPROM_PASS_ADDR + i, newPassword[i]);
-    if (newPassword[i] == '\0') break;  // Stop at null terminator
-  }
-
-  EEPROM.commit();  //  Ensure data is written
-  Serial.println("Restarting to apply new settings...");
-  delay(2000);
-  NVIC_SystemReset();  //  Restart board
-}
-void loadWiFiSettings(char* ssid, char* password) {
-  Serial.println(" Loading stored WiFi credentials...");
-
-  //  Read SSID
-  for (int i = 0; i < MAX_SSID_LENGTH; i++) {
-    ssid[i] = EEPROM.read(EEPROM_SSID_ADDR + i);
-    if (ssid[i] == '\0') break;  // Stop at null terminator
-  }
-
-  //  Read Password
-  for (int i = 0; i < MAX_PASS_LENGTH; i++) {
-    password[i] = EEPROM.read(EEPROM_PASS_ADDR + i);
-    if (password[i] == '\0') break;  // Stop at null terminator
-  }
-
-  Serial.print(" Stored SSID: ");
-  Serial.println(ssid);
-  Serial.print(" Stored Password: ");
-  Serial.println(password);
-}
+//void saveWiFiSettings(const char* newSSID, const char* newPassword) {
+//  Serial.println("Saving WiFi credentials to EEPROM...");
+//
+//  //  Write SSID
+//  for (int i = 0; i < MAX_SSID_LENGTH; i++) {
+//    EEPROM.write(EEPROM_SSID_ADDR + i, newSSID[i]);
+//    if (newSSID[i] == '\0') break;  // Stop at null terminator
+//  }
+//
+//  //  Write Password
+//  for (int i = 0; i < MAX_PASS_LENGTH; i++) {
+//    EEPROM.write(EEPROM_PASS_ADDR + i, newPassword[i]);
+//    if (newPassword[i] == '\0') break;  // Stop at null terminator
+//  }
+//
+//  EEPROM.commit();  //  Ensure data is written
+//  Serial.println("Restarting to apply new settings...");
+//  delay(2000);
+//  NVIC_SystemReset();  //  Restart board
+//}
+//void loadWiFiSettings(char* ssid, char* password) {
+//  Serial.println(" Loading stored WiFi credentials...");
+//
+//  //  Read SSID
+//  for (int i = 0; i < MAX_SSID_LENGTH; i++) {
+//    ssid[i] = EEPROM.read(EEPROM_SSID_ADDR + i);
+//    if (ssid[i] == '\0') break;  // Stop at null terminator
+//  }
+//
+//  //  Read Password
+//  for (int i = 0; i < MAX_PASS_LENGTH; i++) {
+//    password[i] = EEPROM.read(EEPROM_PASS_ADDR + i);
+//    if (password[i] == '\0') break;  // Stop at null terminator
+//  }
+//
+//  Serial.print(" Stored SSID: ");
+//  Serial.println(ssid);
+//  Serial.print(" Stored Password: ");
+//  Serial.println(password);
+//}
 void checkForTimeout() {
   if (millis() - lastKeepAliveTime > timeout) {
     Serial.println("MonoGame is not responding, shutting down LiDAR...");
@@ -451,46 +490,62 @@ void reconnectMQTT() {
   }
 }
 void setup() {
-  SendState();
+  //SendState();
+
+  useSerial = false;
+  useMQTT = false;
+
+  //  Check if LiDAR is connected via Serial
+  bool serialConnected = checkSerialConnection();
+  // Now safely initialize BNO055
+  if (!bno.begin()) {
+    Serial.println("BNO055 not detected. Check wiring!");
+    while (1); // Halt execution here if sensor not found
+  }
+  delay(1000);
+  bno.setExtCrystalUse(true);
+  Serial.println("BNO055 initialized!");
+  // Store initial yaw as zero-point
+  sensors_event_t orientationData;
+  bno.getEvent(&orientationData);
+  _yawOffset = orientationData.orientation.x;
   pinMode(RPLIDAR_MOTOR, OUTPUT);
   analogWrite(RPLIDAR_MOTOR, 0);
   resetLidar();
   lidar.begin(RPLIDAR_SERIAL);
-  useSerial = false;
-  useMQTT = false;
-  //  Check if LiDAR is connected via Serial
-  bool serialConnected = checkSerialConnection();
+  useSerial = true;
 
-  if (serialConnected) {
-    Serial.println("LiDAR detected over Serial.");
-    Serial.println("Input 'q' for serial mode, 'w' for WiFi mode.");
 
-    while (!useSerial && !useMQTT) {
-      if (Serial.available() > 0) {
+  //if (serialConnected) {
+  //  Serial.println("LiDAR detected over Serial.");
+  //  Serial.println("Input 'q' for serial mode, 'w' for WiFi mode.");
 
-        String command = Serial.readStringUntil('\n');
-        command.trim();
-        handleCommand(command, "Serial");
-        break;
-      }
+  //  while (!useSerial && !useMQTT) {
+  //    if (Serial.available() > 0) {
 
-      Serial.print(".");
-      delay(2000);
-    }
-  }
-  else {
-    Serial.println("No serial connection detected. Trying WiFi mode...");
+  //      String command = Serial.readStringUntil('\n');
+  //      command.trim();
+  //      handleCommand(command, "Serial");
+  //      break;
+  //    }
 
-    wifiConfigured = connectWiFi(ssid, password);
-    if (!wifiConfigured) {
-      Serial.println("No valid WiFi stored. Waiting for settings over Serial...");
-      waitForWiFiConfig(); // Wait for WiFi settings over Serial
-    }
-    mqttClient.loop();
-    useMQTT = true;
-    SendStatusMessage("LiDAR set to use MQTT with no serial connected");
-  }
-  Serial.println("Setup complete");
+  //    Serial.print(".");
+  //    delay(2000);
+  //  }
+  //}
+  //else {
+  //  Serial.println("No serial connection detected. Trying WiFi mode...");
+
+  //  wifiConfigured = connectWiFi(ssid, password);
+  //  if (!wifiConfigured) {
+  //    Serial.println("No valid WiFi stored. Waiting for settings over Serial...");
+  //    waitForWiFiConfig(); // Wait for WiFi settings over Serial
+  //  }
+  //  mqttClient.loop();
+  //  useMQTT = true;
+  //  SendStatusMessage("LiDAR set to use MQTT with no serial connected");
+  //}
+  //Serial.println("Setup complete");
 }
 void loop() {
 
@@ -512,146 +567,134 @@ void loop() {
     }
     mqttClient.loop();
   }
-  if (millis() - lastStateUpdate >= stateUpdateInterval) {
-    lastStateUpdate = millis();
-  }
+  unsigned long now = millis();
+  float deltaTime = (now - lastTime) / 1000.0f;
+  lastTime = now;
+
+  //// Read acceleration
+  //sensors_event_t accelEvent;
+  //bno.getEvent(&accelEvent, Adafruit_BNO055::VECTOR_LINEARACCEL);
+
+  //float ax_ms2 = accelEvent.acceleration.y;
+  //float ay_ms2 = accelEvent.acceleration.x;
+
+  //bool isMoving = fabs(ax_ms2) > motionThreshold || fabs(ay_ms2) > motionThreshold;
+
+  //// 🔁 Update raw velocity only if moving
+  //if (isMoving) {
+  //  velocity.x -= ax_ms2 * deltaTime;
+  //  velocity.y += ay_ms2 * deltaTime;
+  //  lastMotionTime = now;
+  //}
+  //else {
+  //  if (now - lastMotionTime > 1000) {
+  //    velocity.x = 0;
+  //    velocity.y = 0;
+  //  }
+  //}
+
+  //// 🧹 Smooth velocity every frame
+  //vxHistory[velocityHistoryIndex] = velocity.x;
+  //vyHistory[velocityHistoryIndex] = velocity.y;
+  //velocityHistoryIndex = (velocityHistoryIndex + 1) % velocitySmoothingWindow;
+
+  //float sumX = 0, sumY = 0;
+  //for (int i = 0; i < velocitySmoothingWindow; i++) {
+  //  sumX += vxHistory[i];
+  //  sumY += vyHistory[i];
+  //}
+  //float smoothedVx = sumX / velocitySmoothingWindow;
+  //float smoothedVy = sumY / velocitySmoothingWindow;
+
+  //// 📤 Send smoothed value at interval
+  //if (now - lastVelocitySentTime >= velocitySendInterval) {
+  //  lastVelocitySentTime = now;
+  //  sendIMUVelocityPacket(Vec2{ smoothedVx, smoothedVy }, now);
+  //}
+
   // Read and store LiDAR data in batches
   if (currentState == State::RUNNING) {
     if (lidar.waitPoint() == RESULT_OK) {
+      //sensors_event_t accelEvent;
+      //bno.getEvent(&accelEvent, Adafruit_BNO055::VECTOR_LINEARACCEL);
+
+      //int16_t ax = (int16_t)(accelEvent.acceleration.x * 1000);
+      //int16_t ay = (int16_t)(accelEvent.acceleration.y * 1000);
+      //int16_t az = (int16_t)(accelEvent.acceleration.z * 1000);
+
+
+
+      sensors_event_t orientationData;
+      bno.getEvent(&orientationData);
+      float currentYaw = orientationData.orientation.x - _yawOffset;
+      // Wrap to 0–360
+      if (currentYaw < 0) currentYaw += 360;
       float rawDistance = lidar.getCurrentPoint().distance;
       float rawAngle = lidar.getCurrentPoint().angle;
       byte quality = lidar.getCurrentPoint().quality;
 
-      
-
-      if (rawDistance > 200 && quality > 0 ) {
-        uint16_t angle = (uint16_t)(rawAngle * 100);  // Store angle as int16_t (2 bytes)
-        uint16_t distance = (uint16_t)rawDistance;  // Store distance as int16_t (2 bytes)
-
-        // Store in batch array
-        lidarPoints[batchIndex].angle = angle;
+      if (rawDistance > 160 && quality >= 5 && rawDistance < 3500) {
+        lidarPoints[batchIndex].angle = (uint16_t)(rawAngle * 100);
+        lidarPoints[batchIndex].distance = (uint16_t)rawDistance;
         lidarPoints[batchIndex].quality = quality;
-        lidarPoints[batchIndex].distance = distance;
+        lidarPoints[batchIndex].yaw = (uint16_t)(currentYaw * 100);
+        //lidarPoints[batchIndex].vx = 0; //(velocity.x * 1000.0f);
+        //lidarPoints[batchIndex].vy = 0; //(velocity.y * 1000.0f);
+        lidarPoints[batchIndex].timestamp = now;
 
         batchIndex++;
 
-        // Send batch when full
         if (batchIndex >= batchSize) {
           sendBatch();
-          batchIndex = 0; // Reset batch index
+          
+          batchIndex = 0;
         }
       }
     }
-    else if (lidar.waitPoint() == RESULT_OPERATION_FAIL) {
-      SendStatusMessage("LiDAR data read failed.");
-    }
-
-    delay(0);
   }
 
-  if (currentState == State::PAUSED) {
-    delay(50); // Allow some delay when paused
-  }
+
+}
+void sendIMUVelocityPacket(Vec2 vel, unsigned long timestamp) {
+  struct __attribute__((packed)) IMUVelocityPacket {
+    uint32_t timestamp;
+    float vx;
+    float vy;
+  } pkt;
+
+  pkt.timestamp = timestamp;
+  pkt.vx = vel.x;
+  pkt.vy = vel.y;
+
+  Serial.write(0xFA); Serial.write(0xAF); // Start marker
+  Serial.write((uint8_t*)&pkt, sizeof(pkt));
+  Serial.write(0xEF); Serial.write(0xBE); // End marker
 }
 void sendBatch() {
-  byte payload[batchSize * sizeof(LidarPoint)];  //  Define payload buffer inside sendBatch()
-  int index = 0; //  Keep track of byte position
 
-  for (int i = 0; i < batchIndex; i++) {
-    LidarPoint lidarPoint;
-    lidarPoint.angle = lidarPoints[i].angle;
-    lidarPoint.quality = lidarPoints[i].quality;
-    lidarPoint.distance = lidarPoints[i].distance;
+  const int payloadSize = batchIndex * sizeof(LidarPoint);
 
-    //  Copy each LidarPoint struct into the payload buffer
-    memcpy(&payload[index], &lidarPoint, sizeof(LidarPoint));
-    index += sizeof(LidarPoint);
-  }
+  // Pack the lidarPoints directly into payload with markers
+  payload[0] = 0xFF; // Start Marker 1
+  payload[1] = 0xAA; // Start Marker 2
+  memcpy(&payload[2], lidarPoints, payloadSize);
+  payload[payloadSize + 2] = 0xEE; // End Marker 1
+  payload[payloadSize + 3] = 0xBB; // End Marker 2
 
-  //  Send the payload efficiently
   if (useSerial) {
-    //  Create full payload with markers
-    byte fullPayload[index + 4];
-    fullPayload[0] = 0xFF; // Start Marker 1
-    fullPayload[1] = 0xAA; // Start Marker 2
-    memcpy(&fullPayload[2], payload, index);  //  Copy LiDAR data into payload
-    fullPayload[index + 2] = 0xEE; // End Marker 1
-    fullPayload[index + 3] = 0xBB; // End Marker 2
-
-    //  Send full payload at once
-    Serial.write(fullPayload, index + 4);
-    Serial.flush();  //  Ensure data is fully sent before continuing
+    Serial.write(payload, payloadSize + 4);
+    Serial.flush();
   }
   else if (useMQTT) {
-    //  MQTT does not need markers, send the raw payload
-    bool success = mqttClient.publish(dataTopic, payload, index);
+    bool success = mqttClient.publish(dataTopic, &payload[2], payloadSize);
     if (!success) {
-      Serial.println(" MQTT Publish Failed!");
+      Serial.println("MQTT Publish Failed!");
     }
   }
-
-  batchIndex = 0; //  Reset batch index after sending
+  batchIndex = 0;
 }
-void handleWebClient(WiFiClient client) {
-  Serial.println("Client Connected!");
 
-  String request = "";
-  while (client.connected()) {
-    if (client.available()) {
-      char c = client.read();
-      request += c;
-      if (c == '\n') break;
-    }
-  }
 
-  Serial.print("📥 Received Request: ");
-  Serial.println(request);
 
-  //  Handle WiFi Change
-  if (request.indexOf("GET /SET_WIFI?ssid=") != -1) {
-    int ssidStart = request.indexOf("ssid=") + 5;
-    int passStart = request.indexOf("&pass=") + 6;
-    int endIndex = request.indexOf(" ", passStart);
-
-    String newSSID = request.substring(ssidStart, passStart - 6);
-    String newPassword = request.substring(passStart, endIndex);
-
-    newSSID.trim();
-    newPassword.trim();
-
-    Serial.print(" New WiFi: ");
-    Serial.println(newSSID);
-    Serial.print(" New Password: ");
-    Serial.println(newPassword);
-
-    newSSID.toCharArray(ssid, sizeof(ssid));
-    newPassword.toCharArray(password, sizeof(password));
-
-    WiFi.disconnect();
-    WiFi.begin(ssid, password);
-
-    client.println("HTTP/1.1 200 OK");
-    client.println("Content-Type: text/html");
-    client.println();
-    client.println("<h2> WiFi Updated!</h2>");
-    delay(1000);
-    NVIC_SystemReset(); // Restart to apply new credentials
-  }
-
-  //  Send Web UI
-  client.println("HTTP/1.1 200 OK");
-  client.println("Content-Type: text/html");
-  client.println();
-  client.println("<html><head><title>WiFi Config</title></head><body>");
-  client.println("<h2>WiFi Configuration</h2>");
-  client.println("<form action='/SET_WIFI'>");
-  client.println("SSID: <input type='text' name='ssid'><br>");
-  client.println("Password: <input type='text' name='pass'><br>");
-  client.println("<input type='submit' value='Save & Reconnect'>");
-  client.println("</form>");
-  client.println("</body></html>");
-
-  client.stop();
-}
 
 

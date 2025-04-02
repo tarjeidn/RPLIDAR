@@ -117,10 +117,12 @@ namespace RPLIDAR_Mapping.Core
       _inputManager = new InputManager(_device);
       _spriteBatch = GraphicsDeviceProvider.SpriteBatch;
       _map = new Map(_device, _inputManager);
+      UtilityProvider.Map = _map;
       //AlgorithmProvider.DevicePositionEstimator._map = _map;
       //AlgorithmProvider.DevicePositionEstimator._device = _device;
       _mapRenderer = new MapRenderer(_map);
       _mapRenderer._device = _device;
+      UtilityProvider.MapRenderer = _mapRenderer;
       GUIProvider.UserSelection._map = _map;
       _guiManager._map = _map;
       _camera._device = _device;
@@ -134,7 +136,7 @@ namespace RPLIDAR_Mapping.Core
         }
 
         Log("Device initialized!");
-        _device.UpdateLidarSettings(_LidarSettings);
+        //_device.UpdateLidarSettings(_LidarSettings);
       });
     }
 

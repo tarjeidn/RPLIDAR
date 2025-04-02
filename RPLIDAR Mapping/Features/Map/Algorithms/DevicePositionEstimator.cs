@@ -50,65 +50,9 @@ namespace RPLIDAR_Mapping.Features.Map.Algorithms
           out mismatched
       );
 
-
-      // First, apply rotation
-      // 1. Estimate rotation FIRST
-      float simulatedOrientation = _device._deviceOrientation;
-
-      if (estimated.Rotation.HasValue)
+      if (estimated.Offset.HasValue)
       {
-        simulatedOrientation += estimated.Rotation.Value;
-        simulatedOrientation = NormalizeAngleRadians(simulatedOrientation);
-        Debug.WriteLine($"🌀 Simulated orientation after rotation: {MathHelper.ToDegrees(simulatedOrientation):0.00}°");
-      }
-
-      // 2. Recalculate the position offset using this new simulated orientation
-      // You’ll need to update your EstimateOffset() to accept an override orientation for offset calculations
-      var updatedEstimate = RecalculateOffsetOnly(
-          _pointsBuffer,
-          Map.ObservationLookup,
-          simulatedOrientation,
-          currentDevicePos,
-          10,
-          gm
-      );
-
-      // 3. Now apply both, in one go
-      if (estimated.Rotation.HasValue)
-      {
-        float delta = estimated.Rotation.Value;
-
-        float minThreshold = MathHelper.ToRadians(0.2f);   // Ignore tiny jitters
-        float maxThreshold = MathHelper.ToRadians(10f);    // Ignore absurd jumps
-
-        if (Math.Abs(delta) < minThreshold)
-        {
-          Debug.WriteLine($"⚠️ Ignored tiny rotation delta: {MathHelper.ToDegrees(delta):0.00}°");
-        } else
-        {
-          // Clamp to max sane range
-          //float clampedDelta = MathHelper.Clamp(delta, -maxThreshold, maxThreshold);
-
-          // Optionally smooth
-          //float targetRotation = _device._deviceOrientation + clampedDelta;
-          float targetRotation = _device._deviceOrientation + delta;
-          _device._deviceOrientation = NormalizeAngleRadians(targetRotation);
-          _device._deviceOrientation = MathHelper.Lerp(
-              _device._deviceOrientation,
-              NormalizeAngleRadians(targetRotation),
-              0.25f // smoothing factor
-          );
-
-          //Debug.WriteLine($"✅ Applied rotation: {MathHelper.ToDegrees(clampedDelta):0.00}°");
-          Debug.WriteLine($"🎯 Final orientation: {MathHelper.ToDegrees(_device._deviceOrientation):0.00}°");
-        }
-      }
-
-
-
-      if (updatedEstimate.Offset.HasValue)
-      {
-        var offset = -updatedEstimate.Offset.Value;
+        var offset = -estimated.Offset.Value;
         if (offset.Length() > 0.05f)
         {
           var target = _device._devicePosition - offset;
@@ -120,6 +64,7 @@ namespace RPLIDAR_Mapping.Features.Map.Algorithms
       // Finally, clear cache
       Map.ObservationLookup.Clear();
     }
+
     public static float NormalizeAngleRadians(float angle)
     {
       while (angle > MathF.PI) angle -= MathF.Tau;
@@ -209,7 +154,7 @@ namespace RPLIDAR_Mapping.Features.Map.Algorithms
 
       foreach (var point in newPoints)
       {
-        float angleRad = NormalizeAngleRadians(currentDeviceOrientation + MathHelper.ToRadians(point.Angle));
+        //float angleRad = NormalizeAngleRadians(currentDeviceOrientation + MathHelper.ToRadians(point.Angle));
 
         //var key = new ObservationKey(currentDevicePosition, point.Angle, point.Distance);
         //if (TryFindMatchingTileFromWorld(currentDevicePosition, point.Angle, point.Distance, currentDeviceOrientation, gridManager, out Tile oldTile))
@@ -232,29 +177,7 @@ namespace RPLIDAR_Mapping.Features.Map.Algorithms
           Tile newTile = gridManager.GetTileAtGlobalCoordinates(newGlobal.X, newGlobal.Y);
           Vector2 newCenter = newTile.GlobalCenter;
 
-          // Always try to estimate rotation if we have a valid old observation
-          // Always try to estimate rotation if we have a valid old observation
-          float maxDistanceForRotation = 3000f;
-          if (oldTile._lastLIDARpoint != null && oldTile._lastLIDARpoint.Distance < maxDistanceForRotation)
-          {
-            float oldBeamRadians = oldTile._lastLIDARpoint.DeviceOrientation + oldTile._lastLIDARpoint.Radians;
-            float newBeamRadians = currentDeviceOrientation + MathHelper.ToRadians(point.Angle);
-
-            Vector2 oldDir = Vector2.Normalize(new Vector2(MathF.Cos(oldBeamRadians), MathF.Sin(oldBeamRadians)));
-            Vector2 newDir = Vector2.Normalize(new Vector2(MathF.Cos(newBeamRadians), MathF.Sin(newBeamRadians)));
-
-            float angleOffset = MathF.Atan2(
-                oldDir.X * newDir.Y - oldDir.Y * newDir.X, // 2D cross product
-                Vector2.Dot(oldDir, newDir)               // Dot product
-            );
-
-            angleOffset = NormalizeAngleRadians(angleOffset);
-            rotationOffsets.Add(angleOffset);
-
-            //Debug.WriteLine($"🧭 oldBeam: {MathHelper.ToDegrees(oldBeamRadians):0.00}°, newBeam: {MathHelper.ToDegrees(newBeamRadians):0.00}°");
-            //Debug.WriteLine($"🌀 Raw angle delta: {MathHelper.ToDegrees(angleOffset):0.00}°");
-          }
-
+         
 
           // Then handle position offset
           if ((int)(oldCenter.X / tileSize) != newX || (int)(oldCenter.Y / tileSize) != newY)
@@ -271,54 +194,14 @@ namespace RPLIDAR_Mapping.Features.Map.Algorithms
       float? fallbackRotation = null;
 
       // --- Position Offset ---
-      if (offsets.Count >= 15)
+      if (offsets.Count >= 10)
       {
         Vector2 sum = Vector2.Zero;
         foreach (var o in offsets) sum += o;
         averageOffset = sum / offsets.Count;
       }
 
-      // --- Rotation Offset via Tile Matching ---
-      if (rotationOffsets.Count >= 15)
-      {
-        float sinSum = 0f;
-        float cosSum = 0f;
-        foreach (var r in rotationOffsets)
-        {
-          sinSum += MathF.Sin(r);
-          cosSum += MathF.Cos(r);
-        }
-
-        averageRotation = MathF.Atan2(sinSum, cosSum);
-        averageRotation = MathHelper.Clamp(averageRotation.Value, -MathF.PI / 72f, MathF.PI / 72f); // ±2.5°
-        //Debug.WriteLine($"🧭 Estimated avg rotation (circular): {MathHelper.ToDegrees(averageRotation.Value):0.00}°");
-      }
-
-      // --- Fallback Rotation from Profile Matching ---
-      if (rotationOffsets.Count < 15)
-      {
-        var comparedtoTiles = gridManager.GetAllTrustedTiles();
-        fallbackRotation = EstimateRotationFromDistanceProfiles(
-          newPoints,
-          comparedtoTiles,
-          currentDeviceOrientation
-        );
-        //float maxFallback = MathHelper.ToRadians(5f); // try 2.5–5°
-        //fallbackRotation = MathHelper.Clamp(fallbackRotation.Value, -maxFallback, maxFallback);
-        if (fallbackRotation.HasValue)
-        {
-          //Debug.WriteLine($"🧭 [Fallback] Rotation estimated from distance profiles: {MathHelper.ToDegrees(fallbackRotation.Value):0.00}°");
-        }
-      }
-
-      // --- Debug Info ---
-      //Debug.WriteLine($"📊 Rotation offset count: {rotationOffsets.Count}");
-      if (rotationOffsets.Count > 0)
-      {
-        float debugAvg = rotationOffsets.Sum() / rotationOffsets.Count;
-        //Debug.WriteLine($"🧭 Estimated avg rotation: {MathHelper.ToDegrees(debugAvg):0.00}°");
-      }
-
+     
       // --- Final Return (use fallback if needed) ---
       return new MotionEstimate(averageOffset, averageRotation ?? fallbackRotation);
     }
@@ -329,9 +212,9 @@ namespace RPLIDAR_Mapping.Features.Map.Algorithms
         float orientation, // 🔥 New parameter
         out Tile matchedTile,
         out ObservationKey matchedKey,
-        float posTolerance = 10f,
+        float posTolerance = 50f,
         float angleTolerance = 0.5f,
-        float distanceTolerance = 10f,
+        float distanceTolerance = 50f,
         float orientationTolerance = 0.05f // 🔥 New tolerance
     )
     {

@@ -49,6 +49,7 @@ namespace RPLIDAR_Mapping.Features.Map
     public int MainScreenWidth = GraphicsAdapter.DefaultAdapter.CurrentDisplayMode.Width;
     public int MainScreenHeight = GraphicsAdapter.DefaultAdapter.CurrentDisplayMode.Height;
     public bool DrawCycleActive = false;
+    public bool DrawSightLines { get; set; } = false;
     public Vector2 MainScreenSize;
     public Device _device;
     public Vector2 _centerOfFullMap { get; set; }
@@ -146,18 +147,13 @@ namespace RPLIDAR_Mapping.Features.Map
       _centerOfFullMap = destBounds.Center.ToVector2();
       DrawingHelperFunctions.DrawGridPattern(_SpriteBatch, destBounds, deviceScreenPos, 2);
       DrawingHelperFunctions.DrawRectangleBorder(_SpriteBatch, destBounds, 5, Color.White);
-      //DrawingHelperFunctions.DrawRectangleBorder(_SpriteBatch, sourceBounds, 5, Color.Red);
-      //DrawingHelperFunctions.DrawRectangleBorder(_SpriteBatch, viewPort, 5, Color.Blue);
-
-
-
       _SpriteBatch.DrawString(
           ContentManagerProvider.GetFont("DebugFont"),
           $"FPS: {UtilityProvider.FPSCounter.FPS}\nLiDAR Updates/s: {StatisticsProvider.MapStats.LiDARUpdatesPerSecond}",
           new Vector2(10, 10),
           Color.White
       );
-
+      DrawMatchedPairs();
 
     }
 
@@ -217,25 +213,15 @@ namespace RPLIDAR_Mapping.Features.Map
     private void DrawDevice(Vector2 deviceScreenPos)
     {
       Rectangle deviceRect = _device.GetDeviceRectRelative(deviceScreenPos);
-      //Vector2 estimatedDevicePos = AlgorithmProvider.DevicePositionEstimator.UpdatedPosition;
-      // Convert estimated world position to screen space
-      //Vector2 estimatedDeviceScreenPos = _Camera.WorldToScreen(estimatedDevicePos);
-
       // Create a slightly larger rectangle for estimated position
       int sizeIncrease = 10; // Adjust as needed
-      //Rectangle estimatedRect = new Rectangle(
-      //    (int)(estimatedDeviceScreenPos.X - deviceRect.Width / 2 - sizeIncrease),
-      //    (int)(estimatedDeviceScreenPos.Y - deviceRect.Height / 2 - sizeIncrease),
-      //    deviceRect.Width + (sizeIncrease * 2),
-      //    deviceRect.Height + (sizeIncrease * 2)
-      //);
+
       _SpriteBatch.Draw(
           _device._deviceTexture,
           deviceRect,
           Color.Red
       );
       // Draw estimated position as a blue border
-      //DrawingHelperFunctions.DrawRectangleBorder(_SpriteBatch, estimatedRect, 3, Color.Blue);
       DrawDeviceOrientationLine(deviceScreenPos);
 
     }
@@ -308,34 +294,13 @@ namespace RPLIDAR_Mapping.Features.Map
         DrawingHelperFunctions.DrawRectangleBorder(_SpriteBatch, screenRect, 2, Color.White);
       }
     }
-    private void DrawMergedRectangles(Vector2 devicePosition, Vector2 centerOfFullMap)
+    private void DrawMatchedPairs()
     {
-      // IMPORTANT: set minsize here, do not look it up from settings in the if statement. Causes a huge drop in speed
-      int minSize = _map._tileMerge.MinMergedTileSize;
-      foreach (var (rect, angle, ispermanent) in _map._tileMerge._mergedRectangles)
+      foreach (var (from, to) in _map.MatchedPairs)
       {
-        if (rect.Width < minSize && rect.Height < minSize)
-        {
-          continue;
-        }
-        Color color = ispermanent ? Color.Green : Color.White;
-        // Convert world coordinates to screen coordinates
-        Vector2 screenPos = new Vector2(
-            rect.X - devicePosition.X + centerOfFullMap.X,
-            rect.Y - devicePosition.Y + centerOfFullMap.Y
-        );
-
-        // The rotation pivot must be the rectangle center
-        Vector2 rectCenter = screenPos + new Vector2(rect.Width / 2, rect.Height / 2);
-
-        //  Queue lines instead of drawing immediately
-        ContentManagerProvider.QueueRotatedRectangleBorder(
-            rectCenter,   // Center of rotation
-            rect.Width,   // Rectangle width
-            rect.Height,  // Rectangle height
-            angle,        // Rotation angle in radians
-            color   // Border color
-        );
+        Vector2 screenFrom = UtilityProvider.Camera.WorldToScreen(from);
+        Vector2 screenTo = UtilityProvider.Camera.WorldToScreen(to);
+        _SpriteBatch.DrawLine(screenFrom, screenTo, Color.Yellow, 2);  // Use your own draw line method
       }
     }
     public void DrawTiles(SpriteBatch spriteBatch, Vector2 gridOffset, Grid grid, Vector2 devicePos)
@@ -359,7 +324,7 @@ namespace RPLIDAR_Mapping.Features.Map
 
           continue;
         }
-        tile.Draw(_SpriteBatch, screenPos, devicePos);
+        tile.Draw(_SpriteBatch, screenPos, devicePos, DrawSightLines);
       }
     }
     private void DrawMergedLines(Rectangle sourceBounds)

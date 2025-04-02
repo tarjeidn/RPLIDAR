@@ -32,13 +32,13 @@ namespace RPLIDAR_Mapping.Features.Map.Algorithms
 
     public bool RegulatorEnabled = false;
     public float TrustIncrement = 50;
-    public float TrustDecrement = 40;
+    public float TrustDecrement = 18;
 
     public int TileDecayRate = 10;
     public int MaxTileDecayRate = 300;
 
-    public int DecayFrequency = 20;
-    public int TrustThreshold = 50;
+    public int DecayFrequency = 4;
+    public int TrustThreshold = 30;
     public float TileTrustTreshHold = 50;
 
     public int MinTileTrustThreshold = 10;

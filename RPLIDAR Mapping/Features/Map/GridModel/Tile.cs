@@ -104,6 +104,7 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
       // 🏗 Mark tile as permanent if it stays trusted long enough
       if (TrustDurationCounter >= PermanentTrustThreshold)
       {
+        Cluster.TrustedTiles++;
         IsPermanent = true;
       }
     }
@@ -121,15 +122,15 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
       //  return gridGlobalPosition + tileLocalPosition + new Vector2(MapScaleManager.Instance.ScaledTileSizePixels / 2.0f, MapScaleManager.Instance.ScaledTileSizePixels / 2.0f);
     }
 
-    public void Draw(SpriteBatch spriteBatch, Vector2 screenPos, Vector2 decivePos)
+    public void Draw(SpriteBatch spriteBatch, Vector2 screenPos, Vector2 decivePos, bool drawSightLines)
     {
 
-
+      if (TrustedScore < AlgorithmProvider.TileTrustRegulator.TrustThreshold) return;
       float intensity = 0;
       if (TrustedScore != 0)
       {
         intensity = MathHelper.Clamp(
-            (TrustedScore - TTR.TileTrustTreshHold) / (100 - TTR.TileTrustTreshHold),
+            TrustedScore  / 100 ,
             0f, 1f
         );
       }
@@ -139,22 +140,22 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
       int tileSize = MapScaleManager.Instance.ScaledTileSizePixels;
       if (ScreenRect == Rectangle.Empty)
       {
-        ScreenRect = new Rectangle((int)screenPos.X, (int)screenPos.Y, tileSize, tileSize);
+        ScreenRect = new Rectangle((int)screenPos.X+(tileSize/2), (int)screenPos.Y + (tileSize / 2), tileSize, tileSize);
       }
-      // Ensure proper tile scaling
-
-
-
 
       // Draw red Sightline from tile using LiDAR Angle
-      if (_lastLIDARpoint != null)
+      if (drawSightLines)
       {
-        Rectangle destRect = UtilityProvider.Camera.GetDestinationRectangle();
-        Vector2 sightEnd = DrawingHelperFunctions.GetScreenBorderIntersection(screenPos, destRect,  _lastLIDARpoint.Radians);
-        DrawingHelperFunctions.DrawLine(spriteBatch, screenPos, sightEnd, Color.Red, 2, 0.1f);
+        if (_lastLIDARpoint != null)
+        {
+          Rectangle destRect = UtilityProvider.Camera.GetDestinationRectangle();
+          Vector2 sightEnd = DrawingHelperFunctions.GetScreenBorderIntersection(screenPos, destRect, _lastLIDARpoint.Radians);
+          DrawingHelperFunctions.DrawLine(spriteBatch, screenPos, sightEnd, Color.Red, 2, 0.1f);
+        }
+        // draw green sightlines from device
+        DrawingHelperFunctions.DrawLine(spriteBatch, decivePos, screenPos, Color.Green, 2, 0.1f);
+
       }
-      // draw green sightlines from device
-      DrawingHelperFunctions.DrawLine(spriteBatch, decivePos, screenPos, Color.Green, 2, 0.1f);
       spriteBatch.Draw(
           _TileTexture,
           ScreenRect,

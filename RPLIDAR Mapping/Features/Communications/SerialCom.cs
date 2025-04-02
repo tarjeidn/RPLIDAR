@@ -14,6 +14,7 @@ using System.IO;
 using System.Threading.Tasks;
 using SharpDX.MediaFoundation;
 using Microsoft.Xna.Framework;
+using System.Threading;
 
 namespace RPLIDAR_Mapping.Features.Communications
 {
@@ -30,8 +31,9 @@ namespace RPLIDAR_Mapping.Features.Communications
     private DateTime _lastStateRequest = DateTime.MinValue;
     private List<byte> _serialBuffer = new List<byte>(); // Buffer for binary data
     private ConnectionParams _connectionParams;
+    private string _packetType = null;
     public event Action<string> OnMessageReceived;
-
+    private StringBuilder _textLineBuffer = new StringBuilder();
 
     // Thread-safe queue to store incoming LiDAR data as DataPoint
     private ConcurrentQueue<DataPoint> _dataQueue = new ConcurrentQueue<DataPoint>();
@@ -63,34 +65,14 @@ namespace RPLIDAR_Mapping.Features.Communications
 
 
 
-    public SerialCom(ConnectionParams conn, int baudRate = 250000)
+    public SerialCom(ConnectionParams conn, int baudRate = 115200)
     {
-     
       _connectionParams = conn;
-
-
-      try
-      {
-        _serialPort = new SerialPort(_connectionParams.SerialPort, baudRate)
-        {
-          DataBits = 8,
-          Parity = Parity.None,
-          StopBits = StopBits.One,
-          Handshake = Handshake.None,
-          NewLine = "\n"
-        };
-
-        _serialPort.DataReceived += SerialPort_DataReceived;
-        _serialPort.Open();
-        _isInitialized = true;
-
-        Log($"Connected to {_connectionParams.SerialPort}");
-      }
-      catch (Exception ex)
-      {
-        Log($"Error initializing serial port: {ex.Message}");
-      }
+      Connect();
+      Thread.Sleep(1000); // Give Arduino time to boot
+      _isInitialized = true;
     }
+
     public void InitializeMode()
     {
       if (_serialPort.IsOpen)
@@ -107,7 +89,7 @@ namespace RPLIDAR_Mapping.Features.Communications
 
       if (!availablePorts.Contains(_connectionParams.SerialPort))
       {
-        Log($" {_connectionParams.SerialPort} not found. Searching for available ports...");
+        Log($"{_connectionParams.SerialPort} not found. Searching for available ports...");
 
         foreach (string port in availablePorts)
         {
@@ -117,26 +99,44 @@ namespace RPLIDAR_Mapping.Features.Communications
             {
               testPort.Open();
               _connectionParams.SerialPort = port;
-              _serialPort.PortName = port;
-              testPort.Close();
               Log($"Found and switched to available port: {port}");
+              testPort.Close();
               break;
             }
+          } catch
+          {
+            // Ignore ports that can't be opened
           }
-          catch { /* Ignore errors for ports that can't be opened */ }
         }
       }
 
       try
       {
+        // Dispose old port if it exists
+        _serialPort?.Dispose();
+
+        _serialPort = new SerialPort(_connectionParams.SerialPort, 115200)
+        {
+          DataBits = 8,
+          Parity = Parity.None,
+          StopBits = StopBits.One,
+          Handshake = Handshake.None,
+          NewLine = "\n",
+          DtrEnable = false,   // 🔥 prevent auto-reset
+          RtsEnable = false
+        };
+
+        _serialPort.DataReceived += SerialPort_DataReceived;
         _serialPort.Open();
+
         Log($"Serial Port {_connectionParams.SerialPort} Reconnected");
-      }
-      catch (Exception ex)
+      } catch (Exception ex)
       {
-        Log($" Failed to reconnect serial port: {ex.Message}");
+        Log($"Failed to reconnect serial port: {ex.Message}");
       }
     }
+
+
     public string FindAvailablePort(string deviceNameHint = "Arduino")
     {
       foreach (string port in SerialPort.GetPortNames())
@@ -264,87 +264,91 @@ namespace RPLIDAR_Mapping.Features.Communications
    
     private bool _isReceivingPacket = false;
 
+
+
+
     private void SerialPort_DataReceived(object sender, SerialDataReceivedEventArgs e)
     {
       try
       {
         int bytesToRead = _serialPort.BytesToRead;
-        if (bytesToRead == 0) return; // Ignore empty reads
+        if (bytesToRead <= 0) return;
 
         byte[] buffer = new byte[bytesToRead];
         _serialPort.Read(buffer, 0, bytesToRead);
-        //Debug.WriteLine($"Received {buffer.Length} bytes");
 
-        //  Check if this is a UTF-8 string (status message)
-        bool isUtf8 = Utility.IsUtf8String(buffer, out string xmessage);
-        //Debug.WriteLine($" IsUtf8String returned: {isUtf8}");
-
-        if (Utility.IsUtf8String(buffer, out string message))
+        for (int i = 0; i < buffer.Length; i++)
         {
-          //Log($"Ignored Status Message: {message}");
-          OnMessageReceived?.Invoke($"Serial: {message}");
-          //_monitorViewModel.AddMessage($"Received {buffer.Length} bytes");
-          return; //Don't process as binary
-        }
+          byte b = buffer[i];
 
-        // Process each byte individually
-        foreach (byte b in buffer)
-        {
           if (!_isReceivingPacket)
           {
-            // Look for start marker (0xFF 0xAA)
+            // LiDAR packet start marker: 0xFF 0xAA
             if (_serialBuffer.Count == 0 && b == 0xFF)
             {
               _serialBuffer.Add(b);
-            }
-            else if (_serialBuffer.Count == 1 && b == 0xAA)
+            } else if (_serialBuffer.Count == 1 && _serialBuffer[0] == 0xFF && b == 0xAA)
             {
               _serialBuffer.Add(b);
-              _isReceivingPacket = true; // Now start collecting data
+              _isReceivingPacket = true;
+              _packetType = "lidar";
             }
-            else
+              // Text mode (ASCII printable + newline)
+              else if (b == '\n')
             {
-              _serialBuffer.Clear(); // Reset buffer if sequence is invalid
+              string msg = _textLineBuffer.ToString().Trim();
+              if (!string.IsNullOrEmpty(msg))
+                OnMessageReceived?.Invoke($"Serial: {msg}");
+              _textLineBuffer.Clear();
+            } else if (b >= 32 && b < 127)
+            {
+              _textLineBuffer.Append((char)b);
+            } else
+            {
+              _textLineBuffer.Clear(); // Ignore garbage
             }
-          }
-          else
+          } else
           {
-            // Collect data until we detect the end marker (0xEE 0xBB)
             _serialBuffer.Add(b);
-            if (_serialBuffer.Count > 2 &&
+
+            // ✅ Check end markers for LiDAR
+            if (_packetType == "lidar" &&
+                _serialBuffer.Count > 4 &&
                 _serialBuffer[^2] == 0xEE &&
                 _serialBuffer[^1] == 0xBB)
             {
-              // Full packet received, remove markers
               int payloadSize = _serialBuffer.Count - 4;
-              byte[] lidarPayload = _serialBuffer.Skip(2).Take(payloadSize).ToArray();
 
-              // Ensure payload is a multiple of 5 (valid Lidar data)
-              if (payloadSize % 5 == 0)
+              // 🚀 Avoid .Skip() by copying directly
+              byte[] lidarPayload = new byte[payloadSize];
+              _serialBuffer.CopyTo(2, lidarPayload, 0, payloadSize);
+
+              if (payloadSize % 11 == 0)
               {
-                //Debug.WriteLine($" Processed {payloadSize} bytes ");
                 Utility.ProcessLidarBatchBinary(lidarPayload, _dataQueue);
-              }
-              else
+              } else
               {
-                Debug.WriteLine($"Unexpected payload size: {payloadSize} bytes. Not a multiple of 5");
+                Debug.WriteLine($"⚠ Unexpected LiDAR payload size: {payloadSize} bytes");
               }
 
-              //  Reset buffer for the next packet
               _serialBuffer.Clear();
               _isReceivingPacket = false;
+              _packetType = null;
             }
+
+            // Future: Add other packet types here
           }
         }
-      }
-      catch (Exception ex)
+      } catch (Exception ex)
       {
         OnMessageReceived?.Invoke($"Serial Error: {ex.Message}");
-        Debug.WriteLine($"Error in SerialPort_DataReceived: {ex.Message}");
+        Debug.WriteLine($"❌ Error in SerialPort_DataReceived: {ex.Message}");
         _serialBuffer.Clear();
         _isReceivingPacket = false;
+        _packetType = null;
       }
     }
+
 
 
 
@@ -387,7 +391,7 @@ namespace RPLIDAR_Mapping.Features.Communications
     //      byte quality = byte.Parse(parts[2], CultureInfo.InvariantCulture);
 
     //      // Enqueue a new DataPoint
-          
+
     //      _dataQueue.Enqueue(new DataPoint(angle, distance, quality));
     //      Log($"Queue Size: {_dataQueue.Count}");
     //    }

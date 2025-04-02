@@ -235,7 +235,7 @@ namespace RPLIDAR_Mapping {
         
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("100")]
+        [global::System.Configuration.DefaultSettingValueAttribute("50")]
         public int LIDARDataBatchSize {
             get {
                 return ((int)(this["LIDARDataBatchSize"]));
@@ -283,7 +283,7 @@ namespace RPLIDAR_Mapping {
         
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("100")]
+        [global::System.Configuration.DefaultSettingValueAttribute("50")]
         public int MapUpdateBatchSize {
             get {
                 return ((int)(this["MapUpdateBatchSize"]));

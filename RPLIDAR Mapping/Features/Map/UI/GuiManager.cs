@@ -182,10 +182,11 @@ public class GuiManager
 
     float zoom = MapScaleManager.Instance.MapZoomFactor;
     float gridScaleFactor = MapScaleManager.Instance.ScaleFactor;
-    float minPointDistance = _tileMerge.MinPointDistance;
-    int minPointQuality = _tileMerge.MinPointQuality;
+    float minPointDistance = _map._minPointDistance;
+    int maxPointDistance = _map.MaxAcceptableDistance;
+    int minPointQuality = _map._minPointQuality;
     int MinTileBufferSizeToAdd = _map.MinTileBufferSizeToAdd;
-
+    bool drawSightlines = UtilityProvider.MapRenderer.DrawSightLines;
 
     if (ImGui.SliderFloat("Grid Scale", ref gridScaleFactor, 0.1f, 8.0f, "%.2f"))
     {
@@ -194,18 +195,23 @@ public class GuiManager
     }
     if (ImGui.SliderFloat("Zoom", ref zoom, 0.05f, 1))
       MapScaleManager.Instance.SetMapZoomFactor(zoom);
-    if (ImGui.SliderInt("Minimum point quality", ref minPointQuality, 0, 10))
-      _tileMerge.MinPointQuality = minPointQuality;
-    if (ImGui.SliderFloat("MinimumPointDistance", ref minPointDistance, 0, 200))
-      _tileMerge.MinPointDistance = minPointDistance;
-    if (ImGui.SliderInt("Minimum tiles to add", ref MinTileBufferSizeToAdd, 10, 500))
+    if (ImGui.SliderInt("Minimum point quality", ref minPointQuality, 0, 100))
+      _map._minPointQuality = minPointQuality;
+    if (ImGui.SliderFloat("Minimum Point Distance", ref minPointDistance, 0, 200))
+      _map._minPointDistance = minPointDistance;
+    if (ImGui.SliderInt("MinimumPointDistance", ref maxPointDistance, 200, 6000))
+      _map.MaxAcceptableDistance = maxPointDistance;
+    if (ImGui.SliderInt("Minimum tiles to add", ref MinTileBufferSizeToAdd, 0, 500))
       _map.MinTileBufferSizeToAdd = MinTileBufferSizeToAdd;
     if (ImGui.SliderFloat("Font Scale", ref _fontScale, 0.5f, 4.0f, "%.2f"))
     {
       ImGui.GetIO().FontGlobalScale = _fontScale;
       ImGui.GetIO().DisplayFramebufferScale = new System.Numerics.Vector2(_fontScale, _fontScale);
     }
-
+    if (ImGui.Checkbox("Draw sightlines", ref drawSightlines))
+    {
+      UtilityProvider.MapRenderer.DrawSightLines = drawSightlines;
+    }
     //  Begin Tabs
     if (ImGui.BeginTabBar("MainTabs"))
     {
@@ -398,7 +404,7 @@ public class GuiManager
       _tileTrustRegulator.TrustDecrement = trustDecrement;
     }
 
-    if (ImGui.SliderInt("Decay Frequency (updates)", ref decayFrequency, 0, 100)) // 100 is a placeholder max value
+    if (ImGui.SliderInt("Decay Frequency (updates)", ref decayFrequency, 0, 20)) // 100 is a placeholder max value
     {
       _tileTrustRegulator.DecayFrequency = decayFrequency;
     }

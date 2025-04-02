@@ -12,6 +12,8 @@ using RPLIDAR_Mapping.Features.Communications;
 using RPLIDAR_Mapping.Providers;
 using RPLIDAR_Mapping.Features.Map.UI;
 using RPLIDAR_Mapping.Models;
+using RPLIDAR_Mapping.Utilities;
+using static RPLIDAR_Mapping.Models.TileCluster;
 
 
 namespace RPLIDAR_Mapping.Features.Map.Algorithms
@@ -25,6 +27,7 @@ namespace RPLIDAR_Mapping.Features.Map.Algorithms
     public List<(Vector2 Start, Vector2 End, float AngleDegrees, float AngleRadians, bool IsPermanent)> _inferredLines { get; private set; } = new();
     public List<(Vector2 Start, Vector2 End, float AngleDegrees, float AngleRadians, bool IsPermanent)> _previousMergedLines { get; private set; } = new();
     public List<Rectangle> ClusterBoundingRectangles { get; private set; } = new();
+    private List<TileCluster> UpdatedClusters = new();
     public List<TileCluster> TileClusters = new();
     public List<TileCluster> PreviousTileClusters = new();
     public Map _map { get; set; }
@@ -52,7 +55,7 @@ namespace RPLIDAR_Mapping.Features.Map.Algorithms
     private Dictionary<Vector2, HashSet<Tile>> clusterLookup = new();
 
     private Dictionary<(int, int), Tile> TileLookup = new();
-
+    private List<Vector2> _previousClusterCenters = new();
     public Vector2 _estimatedPosition { get; private set; } = Vector2.Zero;
 
     public Device _device { get; set; }
@@ -61,11 +64,13 @@ namespace RPLIDAR_Mapping.Features.Map.Algorithms
     {
       Idle,              // Waiting, nothing computed yet
       NewPointsAdded,
-      ComputingTiles,    // Merging tiles
+      ClusteringTiles,    // Merging tiles
+      MergingClusters,
       UpdatingClusters,
       ComputingLines,    // Detecting lines from merged tiles
       ComputingRects,    // Merging rectangles from lines
-      RecalculatingPosition,
+      SplittingClusters,
+      ComputeClusterShift,
       ReadyToDraw        // All computations complete, ready to render
     }
 
@@ -78,54 +83,66 @@ namespace RPLIDAR_Mapping.Features.Map.Algorithms
     public bool Update()
     {
       IsUpdated = false;
-      _tileSize = MapScaleManager.Instance.ScaledTileSizePixels;
+      _tileSize = 10;
       switch (CurrentState)
       {
         case MergeState.Idle:
 
           break;
         case MergeState.NewPointsAdded:
-          CurrentState = ComputeMergedLines ? MergeState.ComputingTiles : MergeState.ReadyToDraw;
+          _previousClusterCenters = TileClusters
+          //.Where(c => c.Tiles.Count >= 10) // ignore tiny clusters
+          .Select(c => c.Center)
+          .ToList();
+          CurrentState = ComputeMergedLines ? MergeState.ClusteringTiles : MergeState.ReadyToDraw;
           break;
 
-        case MergeState.ComputingTiles:
-          // Perform tile merging logic
+        case MergeState.ClusteringTiles:
           // Merge trusted tiles into clusters
-          //ClusterTrustedTiles(_map.GetDistributor()._GridManager.GetAllTrustedTiles());
           ClusterTrustedTiles(_map.NewTiles);
-          //if (DrawMergedTiles) GetClusterBoundingBoxes();
-          CurrentState = ComputeMergedLines ? MergeState.UpdatingClusters : MergeState.ReadyToDraw;
+          CurrentState = ComputeMergedLines ? MergeState.MergingClusters : MergeState.ReadyToDraw;
           break;
-        case MergeState.UpdatingClusters:
+
+        case MergeState.MergingClusters:
+          // Merge clusters
+          int maxSearchDistance = mergeTileRadius * _tileSize;
+          FastMergeOverlappingClusters(UpdatedClusters, maxSearchDistance);
+          CurrentState = ComputeMergedLines ? MergeState.ComputingRects : MergeState.ReadyToDraw;
+          break;
+        case MergeState.ComputingRects:
           // Update clusters
           foreach (TileCluster cluster in TileClusters)
           {
-            cluster.Update();
+            cluster.UpdateBoundingBox();
           }
+
           CurrentState = ComputeMergedLines ? MergeState.ComputingLines : MergeState.ReadyToDraw;
           break;
 
         case MergeState.ComputingLines:
           // Process line detection from merged tiles
-          //DetectLinesFromUpdatedTiles();
-          //DetectLargeFeatures();
-          CurrentState = ComputeMergedRectangles ? MergeState.RecalculatingPosition : MergeState.ReadyToDraw;
+          foreach (TileCluster cluster in TileClusters)
+          {
+            cluster.UpdateFeatureLine();
+          }
+          CurrentState = ComputeMergedRectangles ? MergeState.ReadyToDraw : MergeState.ReadyToDraw;
           break;
 
-        case MergeState.ComputingRects:
-          // Process merging rectangles (if enabled)
-          // MergeRectangles(_map.GetDistributor()._GridManager.GetAllTrustedTiles());
-          MergeTilesFrameCounter = 0;
-          CurrentState = MergeState.ReadyToDraw;
-          break;
+        case MergeState.SplittingClusters:
+          {
 
-        case MergeState.RecalculatingPosition:
-          // Process line detection from merged tiles
-          //DetectLinesFromUpdatedTiles();
-          //AlgorithmProvider.DevicePositionEstimator.Update(_mergedLines, _trustedTiles);
-          //ComputeDeviceMovement(_previousMergedLines, _mergedLines);
-          CurrentState = MergeState.ReadyToDraw;
-          break;
+            SplitClusters();
+            CurrentState = MergeState.ComputeClusterShift;
+            break;
+          }
+        case MergeState.ComputeClusterShift:
+          {
+
+            ComputeClusterShift();
+            CurrentState = MergeState.ReadyToDraw;
+            break;
+          }
+
 
         case MergeState.ReadyToDraw:
           // Computation is complete; tiles and lines are ready for rendering.
@@ -136,6 +153,46 @@ namespace RPLIDAR_Mapping.Features.Map.Algorithms
       }
 
       return IsUpdated;
+    }
+
+
+    private void ComputeClusterShift()
+    {
+      int maxDistanceDrift = 50;
+      Vector2 devicePos = UtilityProvider.Device._devicePosition;
+
+      foreach (var cluster in TileClusters)
+      {
+        Vector2 toCenterNow = cluster.Center - devicePos;
+        float angleNow = MathF.Atan2(toCenterNow.Y, toCenterNow.X);
+        float distNow = toCenterNow.Length();
+
+        float angleDelta = Utility.NormalizeAngle(angleNow - cluster.ExpectedAngle);
+        float distDelta = distNow - cluster.ExpectedDistance;
+
+        Debug.WriteLine("🔍 Cluster Shift Check:");
+        Debug.WriteLine($"• Cluster Center        : {cluster.Center}");
+        Debug.WriteLine($"• Device Position       : {devicePos}");
+        Debug.WriteLine($"• Expected Angle        : {MathHelper.ToDegrees(cluster.ExpectedAngle):0.00}°");
+        Debug.WriteLine($"• Current Angle         : {MathHelper.ToDegrees(angleNow):0.00}°");
+        Debug.WriteLine($"• Δ Angle               : {MathHelper.ToDegrees(angleDelta):0.00}°");
+        Debug.WriteLine($"• Expected Distance     : {cluster.ExpectedDistance:0.00}");
+        Debug.WriteLine($"• Current Distance      : {distNow:0.00}");
+        Debug.WriteLine($"• Δ Distance            : {distDelta:0.00}");
+        Debug.WriteLine($"• Allowed Angle Span    : {MathHelper.ToDegrees(cluster.ExpectedSpan / 2f):0.00}°");
+        Debug.WriteLine($"• Max Distance Drift    : {maxDistanceDrift}");
+
+        if (Math.Abs(angleDelta) > cluster.ExpectedSpan / 2f ||
+            Math.Abs(distDelta) > maxDistanceDrift)
+        {
+          Debug.WriteLine("⚠️  Cluster OUTSIDE sight cone — possible movement.");
+        } else
+        {
+          Debug.WriteLine("✅ Cluster within expected view.");
+        }
+
+        Debug.WriteLine(""); // Empty line for readability
+      }
     }
 
     public void ClearMergedObjects()
@@ -185,9 +242,9 @@ namespace RPLIDAR_Mapping.Features.Map.Algorithms
           updatedClusters.Add(newCluster);
         }
       }
-
+      UpdatedClusters = updatedClusters;
       // **Step 3: Merge overlapping clusters**
-      FastMergeOverlappingClusters(updatedClusters, maxSearchDistance);
+
     }
 
     private TileCluster? FindNearbyCluster(Tile tile, float maxDistance)
@@ -218,51 +275,52 @@ namespace RPLIDAR_Mapping.Features.Map.Algorithms
     }
 
 
-
     private void FastMergeOverlappingClusters(List<TileCluster> updatedClusters, float maxDistance)
     {
-      List<TileCluster> mergedClusters = new();
-      HashSet<TileCluster> processed = new();
       HashSet<TileCluster> toRemove = new();
 
       foreach (var cluster in updatedClusters)
       {
-        if (processed.Contains(cluster)) continue; // Skip already merged clusters
-
-        TileCluster mergedCluster = new TileCluster(cluster); // Clone the current cluster
-        bool merged = false;
-
         foreach (var otherCluster in TileClusters)
         {
-          if (cluster == otherCluster || processed.Contains(otherCluster)) continue;
+          if (cluster == otherCluster || toRemove.Contains(otherCluster)) continue;
 
-          // 🔥 Check if clusters should be merged
           if (ClustersAreClose(cluster, otherCluster, maxDistance))
           {
-            mergedCluster.MergeWith(otherCluster);
-            toRemove.Add(otherCluster); // Mark for removal
-            processed.Add(otherCluster);
-            merged = true;
+            cluster.MergeWith(otherCluster);
+            toRemove.Add(otherCluster);
           }
         }
-
-        if (merged) // Only add merged clusters
-        {
-          mergedClusters.Add(mergedCluster);
-        } else // Keep unmerged clusters
-        {
-          mergedClusters.Add(cluster);
-        }
-
-        processed.Add(cluster);
       }
 
-      // Remove clusters that have been merged
-      TileClusters.RemoveAll(cluster => toRemove.Contains(cluster));
-      // Add newly merged clusters back
-      TileClusters.AddRange(mergedClusters);
+      TileClusters.RemoveAll(c => toRemove.Contains(c));
     }
+    private void SplitClusters()
+    {
+      int maxSearchDistance = mergeTileRadius * _tileSize;
+      List<TileCluster> toRemove = new();
+      List<TileCluster> toAdd = new();
 
+      foreach (var cluster in TileClusters)
+      {
+        var split = cluster.SplitDisconnectedClusters(maxSearchDistance);
+
+        if (split.Count > 1)
+        {
+          toRemove.Add(cluster);
+          toAdd.AddRange(split);
+
+          foreach (var newCluster in split)
+          {
+            foreach (var tile in newCluster.Tiles)
+              tile.Cluster = newCluster;
+          }
+        }
+      }
+
+      TileClusters.RemoveAll(c => toRemove.Contains(c));
+      TileClusters.AddRange(toAdd);
+    }
 
 
     private bool ClustersAreClose(TileCluster clusterA, TileCluster clusterB, float maxDistance)
@@ -280,7 +338,27 @@ namespace RPLIDAR_Mapping.Features.Map.Algorithms
 
       return actualDistance <= maxDistance;
     }
+    public List<Tile> GetConnectedNeighbors(Tile tile, float connectionDistance = 15f)
+    {
+      List<Tile> neighbors = new();
 
+      if (tile.Cluster == null)
+        return neighbors;
+
+      foreach (var other in tile.Cluster.Tiles)
+      {
+        if (other == tile)
+          continue;
+
+        float dist = Vector2.Distance(tile.GlobalCenter, other.GlobalCenter);
+        if (dist <= connectionDistance)
+        {
+          neighbors.Add(other);
+        }
+      }
+
+      return neighbors;
+    }
 
 
 
@@ -308,65 +386,6 @@ namespace RPLIDAR_Mapping.Features.Map.Algorithms
       }
     }
 
-
-    //public void DetectLargeFeatures()
-    //{
-    //  _mergedLines.Clear();
-
-    //  foreach (var cluster in TileClusters)
-    //  {
-    //    if (cluster.Tiles.Count < 10) continue; // Skip small clusters
-
-    //    // ✅ Skip if a permanent line already exists
-    //    if (_map.PermanentLines.Any(line => LineIntersectsCluster(line, cluster)))
-    //      continue;
-
-    //    // Extract all tile centers
-    //    List<Vector2> points = cluster.Tiles.Select(tile => tile.GlobalCenter).ToList();
-
-    //    // ✅ Compute PCA to determine dominant axis
-    //    (Vector2 direction, Vector2 centroid) = ComputePCA(points);
-
-    //    // ✅ Sort points along the dominant axis
-    //    points.Sort((a, b) => Vector2.Dot(a - centroid, direction).CompareTo(Vector2.Dot(b - centroid, direction)));
-
-    //    // ✅ Find min/max bounds
-    //    Vector2 minBound = new Vector2(points.Min(p => p.X), points.Min(p => p.Y));
-    //    Vector2 maxBound = new Vector2(points.Max(p => p.X), points.Max(p => p.Y));
-
-    //    // ✅ Filter out noise and ensure valid points
-    //    List<Vector2> containedPoints = points
-    //        .Where(p => minBound.X <= p.X && p.X <= maxBound.X && minBound.Y <= p.Y && p.Y <= maxBound.Y)
-    //        .ToList();
-
-    //    if (containedPoints.Count < 5) continue; // Skip clusters with too few valid points
-
-    //    // ✅ Identify endpoints of the best-fit line
-    //    Vector2 start = containedPoints.First();
-    //    Vector2 end = containedPoints.Last();
-    //    float lineLength = Vector2.Distance(start, end);
-
-    //    // ✅ Adjust filtering thresholds dynamically
-    //    float distanceFromLidar = Vector2.Distance(Vector2.Zero, centroid);
-    //    float straightnessThreshold = MathHelper.Lerp(5f, 10f, MathF.Min(distanceFromLidar / 1000f, 1f));
-
-    //    if (lineLength < MinLargeFeaturesLineLength) continue; // Skip short lines
-    //    if (!IsClusterStraight(containedPoints, direction, centroid, straightnessThreshold)) continue;
-
-    //    // ✅ Determine if the cluster should be marked as permanent
-    //    bool isPermanent = cluster.Tiles.Count(t => t.IsPermanent) / (float)cluster.Tiles.Count >= 0.5f;
-
-    //    // ✅ Calculate angle
-    //    float angleRadians = MathF.Atan2(end.Y - start.Y, end.X - start.X);
-    //    float angleDegrees = MathHelper.ToDegrees(angleRadians);
-
-    //    // ✅ Store detected line
-    //    _mergedLines.Add(new LineSegment(start, end, angleDegrees, angleRadians, isPermanent, cluster));
-    //  }
-
-    //  // ✅ Infer missing segments between detected features
-    //  //InferMissingWallSegments();
-    //}
 
     private bool LineIntersectsCluster(LineSegment line, TileCluster cluster)
     {

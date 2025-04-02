@@ -248,7 +248,7 @@ namespace RPLIDAR_Mapping.Features.Communications
         {        
           _lastmessageReceived = jsonmessage;
           //Debug.WriteLine($"Received JSON/Text Data via MQTT: {jsonmessage}");
-          Utility.ProcessLidarBatchJson(jsonmessage, _dataQueue);  //  Process JSON LiDAR data       
+          //Utility.ProcessLidarBatchJson(jsonmessage, _dataQueue);  //  Process JSON LiDAR data       
         }
       }
       return Task.CompletedTask;

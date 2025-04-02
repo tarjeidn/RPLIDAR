@@ -9,6 +9,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Reflection.Metadata;
 using System.Runtime.Intrinsics.Arm;
 using System.Text;
 using System.Threading.Tasks;
@@ -119,9 +120,13 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
           Debug.WriteLine($"⚠ WARNING: Tile ({localX}, {localY}) out of bounds! (Grid {gridX}, {gridY})");
           continue;
         }
-
+        if (Math.Abs(gridX) > 50 || Math.Abs(gridY) > 50)
+        {
+          Debug.WriteLine($"🚨 Excessive grid index: ({gridX}, {gridY}) from point ({point.GlobalX}, {point.GlobalY})");
+        }
 
         //  Fetch or create the grid and add the point
+
         GetOrCreateGrid(gridX, gridY).AddPoint(localX, localY, point);
       }
     }

@@ -120,6 +120,7 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
         if (tile.TrustedScore < AlgorithmProvider.TileTrustRegulator.TrustThreshold)
         {
           tile.IsTrusted = false;
+          if (tile.Cluster != null) tile.Cluster.TrustedTiles--;
           _trustedTiles.Remove(tile);
         }
         if (tile.TrustedScore <= 0)

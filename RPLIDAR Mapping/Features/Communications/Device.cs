@@ -23,6 +23,8 @@ namespace RPLIDAR_Mapping.Features.Communications
     private bool _isListeningSerial = false; //  Flag to control serial listening
     public Rectangle _deviceRect {  get; private set; }
     public Vector2 _devicePosition { get; set; }
+    public long lastVelocityTimestamp { get; set; }
+    public Vector2 lastVelocity { get; set; }
     public Texture2D _deviceTexture { get; private set; }
     public float _deviceOrientation { get; set; }
     private const int DeviceWidth = 20; 
@@ -71,6 +73,30 @@ namespace RPLIDAR_Mapping.Features.Communications
 
 
     }
+    public void UpdateDevicePosition(Vector2 velocity, uint timeStamp)
+    {
+      if (timeStamp - lastVelocityTimestamp < 0) return;
+
+      float deltaTimeSec = (timeStamp - lastVelocityTimestamp) / 1000.0f;
+      Vector2 convertedVelocity = new Vector2(-velocity.X, velocity.Y);
+      //float yawRadians = _deviceOrientation;
+
+      //float cos = MathF.Cos(yawRadians);
+      //float sin = MathF.Sin(yawRadians);
+
+      ////Vector2 rotatedVelocity = new Vector2(
+      ////    velocity.X * cos - velocity.Y * sin,
+      ////    velocity.X * sin + velocity.Y * cos
+      ////);
+
+      Vector2 movement = convertedVelocity * deltaTimeSec;
+
+      _devicePosition += movement;
+
+      lastVelocity = velocity;
+      lastVelocityTimestamp = timeStamp;
+    }
+
     public void SetDevicePosition(Vector2 newPos)
     {
       _devicePosition = newPos;

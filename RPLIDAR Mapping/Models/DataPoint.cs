@@ -15,7 +15,17 @@ namespace RPLIDAR_Mapping.Models
     public Vector2 GlobalPosition { get; set; }
     public Vector2 EqTilePosition   { get; set; }
     public Vector2 EqTileGlobalCenter { get; set; }
-    public DataPoint(float angle, float distance, byte quality, Vector2 globalpos, Vector2 eqTilePosition, Vector2 eqTileGlobalCenter)
+    public Vector2 ComputedDevicePositionOffset { get; set; } = Vector2.Zero;
+    public Vector2 VelocityAtHit { get; set; }
+    public Vector2 DevicePositionAtHit { get; set; }
+    public float Yaw { get; set; }
+
+    public float Vx { get; set; }  // Acceleration x (optional)
+    public float Vy { get; set; }  // Acceleration y
+    public uint TimeStamp { get; set; }
+    public bool InTrustedTile { get; set; } = false;
+    public DataPoint(float angle, float distance, byte quality, Vector2 globalpos, Vector2 eqTilePosition, Vector2 eqTileGlobalCenter, float yaw
+      , float vx = 0, float vy = 0, uint timeStamp = 0, bool inTrustedTile = false)
     {
       Angle = angle;
       Distance = distance;
@@ -23,6 +33,12 @@ namespace RPLIDAR_Mapping.Models
       GlobalPosition = globalpos;
       EqTilePosition = eqTilePosition;
       EqTileGlobalCenter = eqTileGlobalCenter;
+      Yaw = yaw;
+      Vx = vx;
+      Vy = vy;
+      VelocityAtHit = new Vector2(vy, vx); // vx and vy are inverted due to physical orientation
+      TimeStamp = timeStamp;
+      InTrustedTile = inTrustedTile;
     }
   }
 }

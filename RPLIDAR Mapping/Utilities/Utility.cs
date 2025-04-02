@@ -1,6 +1,7 @@
 ﻿using Microsoft.Xna.Framework;
 using Newtonsoft.Json;
 using RPLIDAR_Mapping.Features.Communications;
+using RPLIDAR_Mapping.Features.Map.GridModel;
 using RPLIDAR_Mapping.Models;
 using RPLIDAR_Mapping.Providers;
 using SharpDX.MediaFoundation;
@@ -10,6 +11,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
+using System.Runtime.Intrinsics.Arm;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -61,55 +63,6 @@ namespace RPLIDAR_Mapping.Utilities
       return new Vector2(x, y);
     }
 
-    public static void ProcessLidarBatchJson(string jsonData, ConcurrentQueue<DataPoint> queue)
-    {
-      try
-      {
-        List<string> points = JsonConvert.DeserializeObject<List<string>>(jsonData);
-
-        
-
-        List<DataPoint> lidarPoints = new List<DataPoint>();
-
-        foreach (string point in points)
-        {
-          string[] values = point.Split(',');
-
-          if (values.Length == 3)
-          {
-            float angle = float.Parse(values[0], CultureInfo.InvariantCulture);
-            float distance = float.Parse(values[1], CultureInfo.InvariantCulture);
-            byte quality = byte.Parse(values[2]);
-
-            Device device = UtilityProvider.Device;
-            float angleRad = MathHelper.ToRadians(angle) + device._deviceOrientation;
-            int tilesize = 10;
-
-            Vector2 offset = new Vector2(
-                MathF.Cos(angleRad) * distance,
-                MathF.Sin(angleRad) * distance
-            );
-            Vector2 globalPos = device._devicePosition + offset;
-
-            // Correct tile position calculation
-            Vector2 eqTilePosition = new Vector2(
-                MathF.Floor(globalPos.X / tilesize) * tilesize,
-                MathF.Floor(globalPos.Y / tilesize) * tilesize
-            );
-            Vector2 eqTileGlobalCenter = eqTilePosition + new Vector2(tilesize / 2f, tilesize / 2f);
-
-            // Enqueue corrected datapoint
-            queue.Enqueue(new DataPoint(angle, distance, quality, globalPos, eqTilePosition, eqTileGlobalCenter));
-          }
-        }
-
-
-      }
-      catch (Exception ex)
-      {
-        Debug.WriteLine($"Error parsing JSON LiDAR data: {ex.Message}");
-      }
-    }
     public static bool LineSegmentsIntersect(Vector2 p1, Vector2 p2, Vector2 p3, Vector2 p4, out Vector2 intersection)
     {
       intersection = Vector2.Zero;
@@ -136,59 +89,138 @@ namespace RPLIDAR_Mapping.Utilities
 
       return false; // No intersection
     }
+    public static void ProcessIMUVelocityPayload(byte[] payload)
+    {
+      if (UtilityProvider.Device == null) return;
+      if (payload.Length < 12) return;
+
+      uint timestamp = BitConverter.ToUInt32(payload, 0);
+      float vx = BitConverter.ToSingle(payload, 4);
+      float vy = BitConverter.ToSingle(payload, 8);
+
+      Vector2 velocity = new Vector2(vx , vy);
+
+      Debug.WriteLine($"📦 Velocity Packet - Time: {timestamp}, Velocity: {velocity}");
+      
+      UtilityProvider.Device.UpdateDevicePosition(velocity, timestamp);
+    }
+
+    //public static void ProcessLidarBatchBinary(byte[] payload, ConcurrentQueue<DataPoint> queue)
+    //{
+    //  int pointSize = 11;  // 2 angle + 2 distance + 1 quality + 2 yaw + 2 ax + 2 ay + 2 az
+    //  int numPoints = payload.Length / pointSize;
+
+    //  if (payload.Length % pointSize != 0)
+    //  {
+    //    Debug.WriteLine("⚠ Payload size mismatch!");
+    //    return;
+    //  }
+
+    //  queue.Clear();
+
+    //  for (int i = 0; i < numPoints; i++)
+    //  {
+    //    int index = i * pointSize;
+
+    //    float angle = BitConverter.ToUInt16(payload, index + 0) / 100f;
+    //    ushort distance = BitConverter.ToUInt16(payload, index + 2);
+    //    byte quality = payload[index + 4];
+    //    float yaw = BitConverter.ToUInt16(payload, index + 5) / 100f;
+
+    //    //float vxRaw = BitConverter.ToSingle(payload, index + 7);
+    //    //float vyRaw = BitConverter.ToSingle(payload, index + 11);
+
+    //    uint timestamp = BitConverter.ToUInt32(payload, index + 7);
+
+    //    // Position calculation
+    //    float angleRad = MathHelper.ToRadians(angle) + MathHelper.ToRadians(yaw);
+    //    Vector2 offset = new(MathF.Cos(angleRad) * distance, MathF.Sin(angleRad) * distance);
+
+    //    Device device = UtilityProvider.Device;
+    //    Vector2 globalPos = device._devicePosition + offset;
+
+    //    int tileSize = 10;
+    //    //Tile tile = UtilityProvider.Map._gridManager.GetTileAtGlobalCoordinates(globalPos.X, globalPos.Y);
+
+    //    Vector2 tilePos = new(MathF.Floor(globalPos.X / tileSize) * tileSize, MathF.Floor(globalPos.Y / tileSize) * tileSize);
+    //    Vector2 tileCenter = tilePos + new Vector2(tileSize / 2f, tileSize / 2f);
+
+    //    queue.Enqueue(new DataPoint(angle, distance, quality, globalPos, tilePos, tileCenter, yaw, 0, 0, timestamp,false));
+    //  }
+    //}
     public static void ProcessLidarBatchBinary(byte[] payload, ConcurrentQueue<DataPoint> queue)
     {
-      int pointSize = 5;  // Each point is exactly 5 bytes (2 for angle, 2 for distance, 1 for quality)
+      int pointSize = 11;
       int numPoints = payload.Length / pointSize;
+      if (payload.Length % pointSize != 0) return;
 
-      if (payload.Length % pointSize != 0)
-      {
-        Debug.WriteLine("Error: Payload size is not a multiple of 5 bytes!");
-        return;
-      }
+      queue.Clear();
+      List<DataPoint> rawPoints = new(numPoints);
+      Device device = UtilityProvider.Device;
+      int tileSize = 10;
 
-      //  Clear queue before adding new data
-      while (queue.TryDequeue(out _)) { }  // 🚀 Empty the queue
-
+      // Parse points first
       for (int i = 0; i < numPoints; i++)
       {
-        int startIndex = i * pointSize;
+        int index = i * pointSize;
+        float angle = BitConverter.ToUInt16(payload, index + 0) / 100f;
+        ushort distance = BitConverter.ToUInt16(payload, index + 2);
+        byte quality = payload[index + 4];
+        float yaw = BitConverter.ToUInt16(payload, index + 5) / 100f;
+        uint timestamp = BitConverter.ToUInt32(payload, index + 7);
 
-        // Read 2 bytes for angle (int16)
-        ushort angleRaw = BitConverter.ToUInt16(payload, startIndex);
-        float angle = angleRaw / 100.0f; //  Convert back to float (2 decimal places)
-
-        // Read 2 bytes for distance (uint16)
-        ushort distance = BitConverter.ToUInt16(payload, startIndex + 2);
-
-        // Read 1 byte for quality
-        byte quality = payload[startIndex + 4];
-        //Debug.WriteLine($"angled: {angle} distance: {distance} quality: {quality} ");
-        // Enqueue parsed DataPoint into the queue
-        // Calculate global position
-        Device device = UtilityProvider.Device;
-        float angleRad = MathHelper.ToRadians(angle) + device._deviceOrientation;
-        int tilesize = 10;
-
-        Vector2 offset = new Vector2(
-            MathF.Cos(angleRad) * distance,
-            MathF.Sin(angleRad) * distance
-        );
+        float angleRad = MathHelper.ToRadians(angle) + MathHelper.ToRadians(yaw);
+        Vector2 offset = new(MathF.Cos(angleRad) * distance, MathF.Sin(angleRad) * distance);
         Vector2 globalPos = device._devicePosition + offset;
 
-        // Correct tile position calculation
-        Vector2 eqTilePosition = new Vector2(
-            MathF.Floor(globalPos.X / tilesize) * tilesize,
-            MathF.Floor(globalPos.Y / tilesize) * tilesize
-        );
-        Vector2 eqTileGlobalCenter = eqTilePosition + new Vector2(tilesize / 2f, tilesize / 2f);
+        Vector2 tilePos = new(MathF.Floor(globalPos.X / tileSize) * tileSize, MathF.Floor(globalPos.Y / tileSize) * tileSize);
+        Vector2 tileCenter = tilePos + new Vector2(tileSize / 2f, tileSize / 2f);
 
-        // Enqueue corrected datapoint
-        queue.Enqueue(new DataPoint(angle, distance, quality, globalPos, eqTilePosition, eqTileGlobalCenter));
+        rawPoints.Add(new DataPoint(angle, distance, quality, globalPos, tilePos, tileCenter, yaw, 0, 0, timestamp, false));
       }
 
-      
+      // Sort by angle for efficient sliding window
+      rawPoints.Sort((a, b) => a.Angle.CompareTo(b.Angle));
+
+      float angleWindow = 5f;
+      float distanceThresholdSq = 100 * 100;
+
+      int start = 0;
+      for (int i = 0; i < rawPoints.Count; i++)
+      {
+        var point = rawPoints[i];
+        int neighborCount = 0;
+
+        // Move start index to the beginning of the angle window
+        while (start < rawPoints.Count && rawPoints[start].Angle < point.Angle - angleWindow)
+          start++;
+
+        // Check all points in [start, i) and (i, end] range
+        for (int j = start; j < rawPoints.Count && rawPoints[j].Angle <= point.Angle + angleWindow; j++)
+        {
+          if (j == i) continue;
+          float distSq = Vector2.DistanceSquared(point.GlobalPosition, rawPoints[j].GlobalPosition);
+          if (distSq <= distanceThresholdSq)
+          {
+            neighborCount++;
+            if (neighborCount >= 2) break; // Early accept
+          }
+        }
+
+        if (neighborCount >= 2)
+          queue.Enqueue(point);
+      }
     }
+
+
+    public static float NormalizeAngle(float radians)
+    {
+      while (radians > MathF.PI) radians -= MathF.Tau;
+      while (radians < -MathF.PI) radians += MathF.Tau;
+      return radians;
+    }
+
+
     public static int Modulo(int value, int mod) => ((value % mod) + mod) % mod;
 
 
@@ -198,6 +230,7 @@ namespace RPLIDAR_Mapping.Utilities
 
 
   }
+
   public class FPSCounter
   {
     private int _frameCount;
