@@ -20,11 +20,18 @@ namespace RPLIDAR_Mapping.Models
     public readonly float RawAngleDegrees;
     public readonly float RawAngleRadians;
     public readonly float DeviceOrientation;
+    public readonly Vector2 GlobalPosition;
+    public readonly Vector2 RelativePosition;
     public readonly Vector2 DevicePosition;
+    public Vector2 EqTileGlobalCenter;
     public byte Quality;
+    public bool IsRingPoint;
+    public bool IsInferredRingPoint = false;
+    public MapPoint InferredBy = null;
+    public (int, int) InferredByGridIndex;
 
     public MapPoint(float x, float y, float angle, float distance, float radians, float rawRadians, 
-      byte quality, float globalX, float globalY, Vector2 devicePosition, float deviceOrientation)
+      byte quality, float globalX, float globalY, Vector2 devicePosition, float deviceOrientation, bool isRingPoint)
     {
       X = x;
       Y = y;
@@ -37,6 +44,9 @@ namespace RPLIDAR_Mapping.Models
       RawAngleRadians = rawRadians;
       DeviceOrientation = deviceOrientation;
       this.DevicePosition = new Vector2(devicePosition.X, devicePosition.Y);
+      IsRingPoint = isRingPoint;
+      GlobalPosition = new Vector2(globalX, globalY);
+      RelativePosition = new Vector2(x, y);
     }
   }
 

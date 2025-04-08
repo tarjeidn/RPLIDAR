@@ -131,7 +131,7 @@ namespace RPLIDAR_Mapping.Features.Map
         // 🟢 Draw grid tiles
         Vector2 deviceScreenPos = camera.WorldToScreen(devicePosition);
         DrawTiles(_SpriteBatch, gridScreenPos, grid, deviceScreenPos);
-
+        DrawRingTiles(_SpriteBatch, gridScreenPos, grid, deviceScreenPos);
         //  Debug visualization
         //DrawingHelperFunctions.DrawRectangleBorder(_SpriteBatch, new Rectangle((int)gridScreenPos.X, (int)gridScreenPos.Y, 15, 15), 5, Color.Green);
       }
@@ -171,7 +171,7 @@ namespace RPLIDAR_Mapping.Features.Map
         foreach (var gridKey in _GridManager.Grids.Keys)
         {
           Grid grid = _GridManager.Grids[gridKey];
-          if (grid != null && grid._drawnTiles.Count > 0)
+          if (grid != null && (grid._drawnTiles.Count > 0 || grid.RingTiles.Count > 0))
           {
             _gridDrawQueue.Enqueue(gridKey);
           }
@@ -245,6 +245,7 @@ namespace RPLIDAR_Mapping.Features.Map
     private void DrawTilesCanvas()
     {
       // Swap to inactive target for rendering
+      _Camera.CenterOn(_device._devicePosition);
       RenderTarget2D targetToDraw = _activeRenderTargetA ? TilesRenderTarget_B : TilesRenderTarget_A;
 
       _GraphicsDevice.SetRenderTarget(targetToDraw);
@@ -310,10 +311,30 @@ namespace RPLIDAR_Mapping.Features.Map
 
       foreach (Tile tile in grid._drawnTiles.Values)
       {
-        //if (tile.TrustedScore < AlgorithmProvider.TileTrustRegulator.TileTrustTreshHold)
-        //{
-        //  continue; //  Skip untrusted tiles
-        //}
+        tile.WorldGlobalPosition = tile._selfGrid.GridPosition + tile.Position;
+        tile.GlobalCenter = tile.WorldGlobalPosition + new Vector2(tile._tileSize / 2f, tile._tileSize / 2f);
+
+        Vector2 worldPos = tile.WorldGlobalPosition;
+        Vector2 screenPos = camera.WorldToScreen(worldPos);
+        Rectangle tileBounds = tile.WorldRect;
+
+        if (!sourceBounds.Intersects(tileBounds))
+        {
+          continue;
+        }
+        tile.Draw(_SpriteBatch, screenPos, devicePos, DrawSightLines);
+      }
+    }
+    public void DrawRingTiles(SpriteBatch spriteBatch, Vector2 gridOffset, Grid grid, Vector2 devicePos)
+    {
+      //Debug.WriteLine($"RingTiles count: {grid.RingTiles.Count}");
+      Camera camera = UtilityProvider.Camera;
+      Rectangle sourceBounds = camera.GetSourceRectangle();
+
+      foreach (Tile tile in grid.RingTiles)
+      {
+        tile.WorldGlobalPosition = tile._selfGrid.GridPosition + tile.Position;
+        tile.GlobalCenter = tile.WorldGlobalPosition + new Vector2(tile._tileSize / 2f, tile._tileSize / 2f);
 
         Vector2 worldPos = tile.WorldGlobalPosition;
         Vector2 screenPos = camera.WorldToScreen(worldPos);

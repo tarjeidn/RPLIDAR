@@ -65,7 +65,7 @@ namespace RPLIDAR_Mapping.Features.Communications
 
 
 
-    public SerialCom(ConnectionParams conn, int baudRate = 115200)
+    public SerialCom(ConnectionParams conn, int baudRate = 500000)
     {
       _connectionParams = conn;
       Connect();
@@ -95,7 +95,7 @@ namespace RPLIDAR_Mapping.Features.Communications
         {
           try
           {
-            using (SerialPort testPort = new SerialPort(port, 115200))
+            using (SerialPort testPort = new SerialPort(port, 500000))
             {
               testPort.Open();
               _connectionParams.SerialPort = port;
@@ -115,7 +115,7 @@ namespace RPLIDAR_Mapping.Features.Communications
         // Dispose old port if it exists
         _serialPort?.Dispose();
 
-        _serialPort = new SerialPort(_connectionParams.SerialPort, 115200)
+        _serialPort = new SerialPort(_connectionParams.SerialPort, 500000)
         {
           DataBits = 8,
           Parity = Parity.None,
@@ -143,7 +143,7 @@ namespace RPLIDAR_Mapping.Features.Communications
       {
         try
         {
-          using (SerialPort testPort = new SerialPort(port, 115200))
+          using (SerialPort testPort = new SerialPort(port, 500000))
           {
             testPort.ReadTimeout = 1000; //  Prevents hanging forever (1 second timeout)
             testPort.Open();

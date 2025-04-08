@@ -81,6 +81,24 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
       StatisticsProvider.GridStats.FinalizeBatch();
       return gridupdated;
     }
+    public void ResetAllRingTiles()
+    {
+      foreach(Grid grid in Grids.Values)
+      {
+        grid.RingTiles.Clear();
+      }
+    }
+    public HashSet<Tile> GetAllRingTiles()
+    {
+      HashSet<Tile> allRingTiles = new();
+
+      foreach (Grid grid in Grids.Values)
+      {
+        allRingTiles.UnionWith(grid.RingTiles);
+      }
+
+      return allRingTiles;
+    }
 
     private Grid GetOrCreateGrid(int gridX, int gridY, bool createIfMissing = true)
     {
@@ -126,7 +144,7 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
         }
 
         //  Fetch or create the grid and add the point
-
+        if (point.IsInferredRingPoint) point.InferredByGridIndex = (localX, localY);
         GetOrCreateGrid(gridX, gridY).AddPoint(localX, localY, point);
       }
     }

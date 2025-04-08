@@ -11,7 +11,6 @@ using System.Diagnostics;
 using RPLIDAR_Mapping.Features.Map.Statistics;
 using RPLIDAR_Mapping.Features.Map.UI;
 using RPLIDAR_Mapping.Core;
-using SharpDX.Direct2D1.Effects;
 using RPLIDAR_Mapping.Features.Map.Algorithms;
 using RPLIDAR_Mapping.Providers;
 using static RPLIDAR_Mapping.Features.Map.Map;
@@ -43,6 +42,7 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
     public Dictionary<(int, int), Tile> _drawnTiles;
     public List<Tile> _drawnTilesList;
     private HashSet<Tile> _trustedTiles = new();
+    public HashSet<Tile> RingTiles = new();
     public GridManager GridManager;
     public GridStats Stats;
     private TileTrustRegulator TTR =  AlgorithmProvider.TileTrustRegulator;
@@ -143,6 +143,7 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
     public void AddPoint(int X, int Y, MapPoint point)
     {
       Tile tile = GetTileAt(X, Y);
+      tile.IsRingTile = point.IsRingPoint;
       tile._lastLIDARpoint = point;
       int tileSize = 10;
       //int tileSize = ridManager.GridScaleFactor;
@@ -155,7 +156,34 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
       //tile.Position = new Vector2(tile.GlobalCenter.X * tileSize,
       //                            tile.GlobalCenter.Y * tileSize);
 
+      if (point.IsRingPoint)
+      {
+        IsUpdated = true;
+        tile.TrustedScore = 100;
 
+        if (point.IsInferredRingPoint)
+        {
+          tile.IsInferredRingTile = true;
+          var (x, y) = point.InferredByGridIndex;
+          tile.InferredBy = point.InferredBy;
+
+          // ➕ Add to angle-indexed ring tile dictionary
+          float angleDeg = MathHelper.ToDegrees(point.Radians) % 360f;
+          if (angleDeg < 0) angleDeg += 360f;
+          int angleKey = (int)(angleDeg * 10); // 0–3599
+
+          var dict = UtilityProvider.Map.EstablishedRingTilesByAngle;
+          if (!dict.TryGetValue(angleKey, out var tileList))
+          {
+            tileList = new List<Tile>();
+            dict[angleKey] = tileList;
+          }
+          tileList.Add(tile);
+        }
+
+        RingTiles.Add(tile);
+        return;
+      }
       tile.TrustedScore = Math.Min(100, tile.TrustedScore + TTR.TrustIncrement);
 
       if (_drawnTiles.TryAdd((X, Y), tile)) GridManager._map.NewTiles.Add(tile); 
@@ -167,36 +195,7 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
         tile.IsTrusted = true;
         _trustedTiles.Add(tile);
       }
-      // ✅ Register observation and add to lookup
-      Vector2 devicePosition = GridManager._map._device._devicePosition;
-      float deviceOrientation = GridManager._map._device._deviceOrientation;
-      tile.RegisterObservation(devicePosition, point.Angle, point.Distance);
 
-      var key = new ObservationKey(devicePosition, point.Angle, point.Distance, deviceOrientation);
-      if (Map.ObservationLookup.TryGetValue(key, out Tile oldTile))
-      {
-        GridManager._map.MatchedTileCount++;
-        Tile currentTile = GetTileAt(X, Y);
-
-        int oldX = (int)(oldTile.GlobalCenter.X / tileSize);
-        int oldY = (int)(oldTile.GlobalCenter.Y / tileSize);
-
-        int newX = (int)(currentTile.GlobalCenter.X / tileSize);
-        int newY = (int)(currentTile.GlobalCenter.Y / tileSize);
-
-        int dx = Math.Abs(oldX - newX);
-        int dy = Math.Abs(oldY - newY);
-
-        if (dx + dy > 1 )  // use (dx > 0 || dy > 0) for 0 tolerance or use dx + dy > 1 to allow 1-tile tolerance
-        {
-          GridManager._map.MismatchedTileCount++;
-          //Debug.WriteLine($"⚠️ MISMATCH: Expected tile ({oldX},{oldY}), got ({newX},{newY})");
-        }
-      }
-      if (!Map.ObservationLookup.ContainsKey(key))
-      {
-        Map.ObservationLookup.Add(key, tile);
-      }
 
       IsUpdated = true;
     }

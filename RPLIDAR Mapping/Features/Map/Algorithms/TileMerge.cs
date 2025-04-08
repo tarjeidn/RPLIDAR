@@ -401,144 +401,144 @@ namespace RPLIDAR_Mapping.Features.Map.Algorithms
     }
 
 
-    private void ComputeDeviceMovement(List<(Vector2 Start, Vector2 End, float Angle, bool IsPermanent)> oldLines,
-                                   List<(Vector2 Start, Vector2 End, float Angle, bool IsPermanent)> newLines)
-    {
-      if (oldLines.Count == 0 || newLines.Count == 0)
-      {
-        Debug.WriteLine("ComputeDeviceMovement: No lines to compare.");
-        return;
-      }
+    //private void ComputeDeviceMovement(List<(Vector2 Start, Vector2 End, float Angle, bool IsPermanent)> oldLines,
+    //                               List<(Vector2 Start, Vector2 End, float Angle, bool IsPermanent)> newLines)
+    //{
+    //  if (oldLines.Count == 0 || newLines.Count == 0)
+    //  {
+    //    Debug.WriteLine("ComputeDeviceMovement: No lines to compare.");
+    //    return;
+    //  }
 
-      List<Vector2> shifts = new();
-      List<float> angleChanges = new();
+    //  List<Vector2> shifts = new();
+    //  List<float> angleChanges = new();
 
-      int comparisonCount = Math.Min(oldLines.Count, newLines.Count);
-      Debug.WriteLine($"Comparing {comparisonCount} old lines with {newLines.Count} new lines.");
+    //  int comparisonCount = Math.Min(oldLines.Count, newLines.Count);
+    //  Debug.WriteLine($"Comparing {comparisonCount} old lines with {newLines.Count} new lines.");
 
-      for (int i = 0; i < comparisonCount; i++)
-      {
-        var oldLine = oldLines[i];
-        var newLine = newLines[i];
+    //  for (int i = 0; i < comparisonCount; i++)
+    //  {
+    //    var oldLine = oldLines[i];
+    //    var newLine = newLines[i];
 
-        Vector2 oldMidpoint = (oldLine.Start + oldLine.End) / 2;
-        Vector2 newMidpoint = (newLine.Start + newLine.End) / 2;
+    //    Vector2 oldMidpoint = (oldLine.Start + oldLine.End) / 2;
+    //    Vector2 newMidpoint = (newLine.Start + newLine.End) / 2;
 
-        Vector2 shift = newMidpoint - oldMidpoint;
-        shifts.Add(shift);
+    //    Vector2 shift = newMidpoint - oldMidpoint;
+    //    shifts.Add(shift);
 
-        float angleChange = newLine.Angle - oldLine.Angle;
-        angleChanges.Add(angleChange);
+    //    float angleChange = newLine.Angle - oldLine.Angle;
+    //    angleChanges.Add(angleChange);
 
-        Debug.WriteLine($"Line {i}: Old Midpoint: {oldMidpoint}, New Midpoint: {newMidpoint}, Shift: {shift}, Angle Change: {angleChange}");
-      }
+    //    Debug.WriteLine($"Line {i}: Old Midpoint: {oldMidpoint}, New Midpoint: {newMidpoint}, Shift: {shift}, Angle Change: {angleChange}");
+    //  }
 
-      // Compute the average shift (translation)
-      Vector2 avgShift = shifts.Aggregate(Vector2.Zero, (sum, v) => sum + v) / shifts.Count;
-      float avgRotation = angleChanges.Sum() / angleChanges.Count;
+    //  // Compute the average shift (translation)
+    //  Vector2 avgShift = shifts.Aggregate(Vector2.Zero, (sum, v) => sum + v) / shifts.Count;
+    //  float avgRotation = angleChanges.Sum() / angleChanges.Count;
 
-      Debug.WriteLine($"Computed Shift: {avgShift}, Computed Rotation: {avgRotation}");
+    //  Debug.WriteLine($"Computed Shift: {avgShift}, Computed Rotation: {avgRotation}");
 
-      if (avgShift.Length() > 0.1f) // Ignore tiny shifts to avoid noise
-      {
-        _device.SetDevicePosition(_device._devicePosition + avgShift);
-        Debug.WriteLine($"New Device Position: {_device._devicePosition}");
-      } else
-      {
-        Debug.WriteLine("No significant shift detected.");
-      }
+    //  if (avgShift.Length() > 0.1f) // Ignore tiny shifts to avoid noise
+    //  {
+    //    _device.SetDevicePosition(_device._devicePosition + avgShift);
+    //    Debug.WriteLine($"New Device Position: {_device._devicePosition}");
+    //  } else
+    //  {
+    //    Debug.WriteLine("No significant shift detected.");
+    //  }
 
-      //if (Math.Abs(avgRotation) > 0.01f)
-      //{
-      //  _device.SetEstimatedRotation(_device._deviceRotation + avgRotation);
-      //  Debug.WriteLine($"New Device Rotation: {_device._deviceRotation}");
-      //}
-    }
+    //  //if (Math.Abs(avgRotation) > 0.01f)
+    //  //{
+    //  //  _device.SetEstimatedRotation(_device._deviceRotation + avgRotation);
+    //  //  Debug.WriteLine($"New Device Rotation: {_device._deviceRotation}");
+    //  //}
+    //}
 
 
-    private bool IsClusterStraight(List<Vector2> points, Vector2 direction, Vector2 centroid, float baseDeviation)
-    {
-      foreach (var point in points)
-      {
+    //private bool IsClusterStraight(List<Vector2> points, Vector2 direction, Vector2 centroid, float baseDeviation)
+    //{
+    //  foreach (var point in points)
+    //  {
         
-        float distanceFromLidar = Vector2.Distance(_device._devicePosition, point); // Assuming LiDAR is at (0,0)
-        float allowedDeviation = baseDeviation + (distanceFromLidar * 0.1f); // Increase tolerance for farther points
+    //    float distanceFromLidar = Vector2.Distance(_device._devicePosition, point); // Assuming LiDAR is at (0,0)
+    //    float allowedDeviation = baseDeviation + (distanceFromLidar * 0.1f); // Increase tolerance for farther points
 
-        float projectedDistance = Math.Abs(Vector2.Dot(point - centroid, new Vector2(-direction.Y, direction.X))); // Perpendicular distance
-        if (projectedDistance > allowedDeviation)
-        {
-          return false; // Too much deviation, not a straight cluster
-        }
-      }
-      return true;
-    }
-
-
-    private float ComputeDominantLidarAngle(List<float> lidarAngles)
-    {
-      if (lidarAngles.Count < 3) return 0f; // Avoid unstable calculations
-
-      float sumSin = 0, sumCos = 0, sumAngles = 0;
-
-      foreach (float angle in lidarAngles)
-      {
-        float normalizedAngle = angle % 360;
-        float radians = MathHelper.ToRadians(normalizedAngle);
-
-        sumSin += MathF.Sin(radians);
-        sumCos += MathF.Cos(radians);
-
-        //  Handle angle wrapping inside this loop
-        if (normalizedAngle < 90 && sumAngles / lidarAngles.Count > 270)
-          normalizedAngle += 360;
-
-        sumAngles += normalizedAngle;
-      }
-
-      if (sumSin == 0 && sumCos == 0) return 0f; // Prevent division errors
-
-      float avgRadians = MathF.Atan2(sumSin, sumCos);
-      float avgDegrees = MathHelper.ToDegrees(avgRadians) % 360; // Normalize to 0-360
-
-      //  Use the weighted average of angles to stabilize results
-      avgDegrees = sumAngles / lidarAngles.Count;
-      avgDegrees = avgDegrees % 360; // Normalize again
-
-      //  Round to the nearest 5 degrees for stability
-      avgDegrees = MathF.Round(avgDegrees / 5) * 5;
-
-      return MathHelper.ToRadians(avgDegrees);
-    }
+    //    float projectedDistance = Math.Abs(Vector2.Dot(point - centroid, new Vector2(-direction.Y, direction.X))); // Perpendicular distance
+    //    if (projectedDistance > allowedDeviation)
+    //    {
+    //      return false; // Too much deviation, not a straight cluster
+    //    }
+    //  }
+    //  return true;
+    //}
 
 
-    private (Vector2 Direction, Vector2 Centroid) ComputePCA(List<Vector2> points)
-    {
-      if (points.Count < 2) return (Vector2.UnitX, points[0]); // Default if not enough points
+    //private float ComputeDominantLidarAngle(List<float> lidarAngles)
+    //{
+    //  if (lidarAngles.Count < 3) return 0f; // Avoid unstable calculations
 
-      // Compute centroid
-      Vector2 centroid = new Vector2(points.Average(p => p.X), points.Average(p => p.Y));
+    //  float sumSin = 0, sumCos = 0, sumAngles = 0;
 
-      // Compute covariance matrix
-      float sumXX = 0, sumXY = 0, sumYY = 0;
-      foreach (var p in points)
-      {
-        float dx = p.X - centroid.X;
-        float dy = p.Y - centroid.Y;
-        sumXX += dx * dx;
-        sumXY += dx * dy;
-        sumYY += dy * dy;
-      }
+    //  foreach (float angle in lidarAngles)
+    //  {
+    //    float normalizedAngle = angle % 360;
+    //    float radians = MathHelper.ToRadians(normalizedAngle);
 
-      // Solve for the eigenvector of the dominant eigenvalue
-      float trace = sumXX + sumYY;
-      float determinant = (sumXX * sumYY) - (sumXY * sumXY);
-      float eigenvalue = (trace + MathF.Sqrt(trace * trace - 4 * determinant)) / 2;
+    //    sumSin += MathF.Sin(radians);
+    //    sumCos += MathF.Cos(radians);
 
-      Vector2 direction = new Vector2(sumXY, eigenvalue - sumXX);
-      direction.Normalize();
+    //    //  Handle angle wrapping inside this loop
+    //    if (normalizedAngle < 90 && sumAngles / lidarAngles.Count > 270)
+    //      normalizedAngle += 360;
 
-      return (direction, centroid);
-    }
+    //    sumAngles += normalizedAngle;
+    //  }
+
+    //  if (sumSin == 0 && sumCos == 0) return 0f; // Prevent division errors
+
+    //  float avgRadians = MathF.Atan2(sumSin, sumCos);
+    //  float avgDegrees = MathHelper.ToDegrees(avgRadians) % 360; // Normalize to 0-360
+
+    //  //  Use the weighted average of angles to stabilize results
+    //  avgDegrees = sumAngles / lidarAngles.Count;
+    //  avgDegrees = avgDegrees % 360; // Normalize again
+
+    //  //  Round to the nearest 5 degrees for stability
+    //  avgDegrees = MathF.Round(avgDegrees / 5) * 5;
+
+    //  return MathHelper.ToRadians(avgDegrees);
+    //}
+
+
+    //private (Vector2 Direction, Vector2 Centroid) ComputePCA(List<Vector2> points)
+    //{
+    //  if (points.Count < 2) return (Vector2.UnitX, points[0]); // Default if not enough points
+
+    //  // Compute centroid
+    //  Vector2 centroid = new Vector2(points.Average(p => p.X), points.Average(p => p.Y));
+
+    //  // Compute covariance matrix
+    //  float sumXX = 0, sumXY = 0, sumYY = 0;
+    //  foreach (var p in points)
+    //  {
+    //    float dx = p.X - centroid.X;
+    //    float dy = p.Y - centroid.Y;
+    //    sumXX += dx * dx;
+    //    sumXY += dx * dy;
+    //    sumYY += dy * dy;
+    //  }
+
+    //  // Solve for the eigenvector of the dominant eigenvalue
+    //  float trace = sumXX + sumYY;
+    //  float determinant = (sumXX * sumYY) - (sumXY * sumXY);
+    //  float eigenvalue = (trace + MathF.Sqrt(trace * trace - 4 * determinant)) / 2;
+
+    //  Vector2 direction = new Vector2(sumXY, eigenvalue - sumXX);
+    //  direction.Normalize();
+
+    //  return (direction, centroid);
+    //}
 
   }
 }

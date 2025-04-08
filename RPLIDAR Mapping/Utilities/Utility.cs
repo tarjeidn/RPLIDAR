@@ -89,21 +89,21 @@ namespace RPLIDAR_Mapping.Utilities
 
       return false; // No intersection
     }
-    public static void ProcessIMUVelocityPayload(byte[] payload)
-    {
-      if (UtilityProvider.Device == null) return;
-      if (payload.Length < 12) return;
+    //public static void ProcessIMUVelocityPayload(byte[] payload)
+    //{
+    //  if (UtilityProvider.Device == null) return;
+    //  if (payload.Length < 12) return;
 
-      uint timestamp = BitConverter.ToUInt32(payload, 0);
-      float vx = BitConverter.ToSingle(payload, 4);
-      float vy = BitConverter.ToSingle(payload, 8);
+    //  uint timestamp = BitConverter.ToUInt32(payload, 0);
+    //  float vx = BitConverter.ToSingle(payload, 4);
+    //  float vy = BitConverter.ToSingle(payload, 8);
 
-      Vector2 velocity = new Vector2(vx , vy);
+    //  Vector2 velocity = new Vector2(vx , vy);
 
-      Debug.WriteLine($"📦 Velocity Packet - Time: {timestamp}, Velocity: {velocity}");
+    //  Debug.WriteLine($"📦 Velocity Packet - Time: {timestamp}, Velocity: {velocity}");
       
-      UtilityProvider.Device.UpdateDevicePosition(velocity, timestamp);
-    }
+    //  UtilityProvider.Device.UpdateDevicePosition(velocity, timestamp);
+    //}
 
     //public static void ProcessLidarBatchBinary(byte[] payload, ConcurrentQueue<DataPoint> queue)
     //{
@@ -175,8 +175,9 @@ namespace RPLIDAR_Mapping.Utilities
 
         Vector2 tilePos = new(MathF.Floor(globalPos.X / tileSize) * tileSize, MathF.Floor(globalPos.Y / tileSize) * tileSize);
         Vector2 tileCenter = tilePos + new Vector2(tileSize / 2f, tileSize / 2f);
-
-        rawPoints.Add(new DataPoint(angle, distance, quality, globalPos, tilePos, tileCenter, yaw, 0, 0, timestamp, false));
+        DataPoint newPoint = new DataPoint(angle, distance, quality, globalPos, tilePos, tileCenter, yaw, 0, 0, timestamp, false);
+        newPoint.DevicePositionAtHit = device._devicePosition;
+        rawPoints.Add(newPoint);
       }
 
       // Sort by angle for efficient sliding window
@@ -207,7 +208,7 @@ namespace RPLIDAR_Mapping.Utilities
           }
         }
 
-        if (neighborCount >= 2)
+        if (neighborCount >= 0)
           queue.Enqueue(point);
       }
     }

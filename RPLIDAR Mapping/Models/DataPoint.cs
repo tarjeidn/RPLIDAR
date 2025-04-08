@@ -12,6 +12,7 @@ namespace RPLIDAR_Mapping.Models
     public float Angle {  get; set; }
     public float Distance { get; set; }
     public byte Quality { get; set; }
+    public Vector2 OriginalDevicePosition {  get; set; }
     public Vector2 GlobalPosition { get; set; }
     public Vector2 EqTilePosition   { get; set; }
     public Vector2 EqTileGlobalCenter { get; set; }

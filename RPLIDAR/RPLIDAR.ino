@@ -1,8 +1,11 @@
 ﻿
+#include <LDS_RPLIDAR_A1.h>
+
+
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
 #include <ArduinoJson.hpp>
-#include <RPLidar.h>
+//#include <RPLidar.h>
 #include <WiFiNINA.h>
 #include <stdint.h> 
 #include <Wire.h>
@@ -11,7 +14,8 @@
 #include <utility/imumaths.h>
 
 Adafruit_BNO055 bno = Adafruit_BNO055(55);
-
+LDS_RPLIDAR_A1 lidar;
+//RPLidar lidar;
 
 #define EEPROM_SSID_ADDR 0          //  Start address for SSID
 #define EEPROM_PASS_ADDR 32         //  Start address for Password
@@ -52,6 +56,7 @@ const int velocitySmoothingWindow = 5; // adjust for smoothness vs lag
 float vxHistory[velocitySmoothingWindow] = { 0 };
 float vyHistory[velocitySmoothingWindow] = { 0 };
 int velocityHistoryIndex = 0;
+int maxDistance = 4000;
 //FlashStorage(wifiConfig, WiFiSettings);
 
 WiFiSettings settings;
@@ -69,7 +74,11 @@ bool useSerial = false;
 bool useMQTT = false;
 bool isReady = false;
 
-RPLidar lidar;
+
+float currentYaw = 0;
+unsigned long lastMQTTCheck = 0;
+unsigned long lastYawRead = 0;
+const unsigned long yawInterval = 50; // ms interval
 unsigned long lastStateUpdate = 0;
 const unsigned long stateUpdateInterval = 1000; // 1 second
 
@@ -102,8 +111,6 @@ struct LidarPoint {
   uint16_t distance;   // 2 bytes
   byte quality;        // 1 byte
   uint16_t yaw;        // 2 bytes (0–360° → stored as degrees × 100)
-  //float vx;          // 4 bytes velocity X * 1000
-  //float vy;          // 4 bytes velocity Y * 1000
   uint32_t timestamp;  // 4 bytes
 };
 #pragma pack(pop)
@@ -115,9 +122,79 @@ struct IMUVelocityPacket {
 };
 #pragma pack(pop)
 
-int batchSize = 50;  //  Tune this for better performance
+int BATCH_SIZE = 50;  //  Tune this for better performance
 LidarPoint lidarPoints[MAX_BATCH_SIZE];
 byte payload[(MAX_BATCH_SIZE * sizeof(LidarPoint)) + 4];
+void scanPointCallback(float angle_deg, float dist_mm, float quality, bool scan_completed) {
+  if (quality < 5) return; // Simple quality filter
+
+  unsigned long now = millis();
+
+  lidarPoints[batchIndex].angle = (uint16_t)(angle_deg * 100);
+  lidarPoints[batchIndex].quality = (uint8_t)quality;
+  lidarPoints[batchIndex].timestamp = now;
+
+  // Clamp distances outside range to form reference ring
+  if (dist_mm > 160 && dist_mm < 3500)
+    lidarPoints[batchIndex].distance = (uint16_t)dist_mm;
+  else
+    lidarPoints[batchIndex].distance = 3500;
+
+  lidarPoints[batchIndex].yaw = (uint16_t)(currentYaw * 100);
+
+  batchIndex++;
+
+  // Batch ready to send?
+  if (batchIndex >= BATCH_SIZE) {
+    sendBatch(); // Non-blocking batch transmission
+    batchIndex = 0;
+  }
+}
+
+// Non-blocking serial read callback
+int serialReadCallback() {
+  return Serial1.available() ? Serial1.read() : -1;
+}
+
+// Efficient serial write callback
+size_t serialWriteCallback(const uint8_t* buffer, size_t length) {
+  return Serial1.write(buffer, length);
+}
+
+// Motor pin callback (if required)
+void motorPinCallback(float value, LDS::lds_pin_t pin) {
+  // Optional PWM motor control if hardware supports it
+}
+
+void sendBatch() {
+  const int payloadSize = batchIndex * sizeof(LidarPoint);
+
+  // Total payload size = markers (2 + 2) + actual data
+  uint8_t payload[payloadSize + 4];
+
+  payload[0] = 0xFF; // Start marker 1
+  payload[1] = 0xAA; // Start marker 2
+
+  memcpy(&payload[2], lidarPoints, payloadSize);
+
+  payload[payloadSize + 2] = 0xEE; // End marker 1
+  payload[payloadSize + 3] = 0xBB; // End marker 2
+
+  if (useSerial) {
+    Serial.write(payload, payloadSize + 4);
+    Serial.flush(); // optional
+  }
+  else if (useMQTT) {
+    // Send only raw data portion (without markers) over MQTT
+    bool success = mqttClient.publish(dataTopic, &payload[2], payloadSize);
+    if (!success && useSerial) {
+      Serial.println("MQTT Publish Failed!");
+    }
+  }
+
+  batchIndex = 0;
+}
+
 
 void handleCommand(String command, String com) {
   String message = "Received command from " + com + " protocol";
@@ -150,30 +227,20 @@ void handleCommand(String command, String com) {
     delay(100);                                 // Allow motor to stabilize
     SendStatusMessage(("Motor speed set to PWM: " + String(pwmValue)).c_str());
   }
-  else if (command == "s") { // Start command
-    resetLidar();
-    analogWrite(RPLIDAR_MOTOR, motorSpeed); // 5 RPM (200 = 5 RPM)
-    delay(500);                    // Allow motor to stabilize
-    u_result result = lidar.startScan();
-    if (IS_OK(result)) {
-      currentState = State::RUNNING;
+  if (command == "s") {  // Start clearly handled
+    resetLidar();                      // Explicitly reset to known idle state
+    if (StartLidar()) {                // Explicitly start LiDAR scanning
       SendStatusMessage("Running");
-
     }
     else {
-      SendStatusMessage(" Failed to start LiDAR. Error code: ");
-      SendStatusMessage(result, HEX);
-      currentState = State::IDLE;
-      analogWrite(RPLIDAR_MOTOR, 0);
-
+      SendStatusMessage("Failed to start LiDAR.");
     }
     SendState();
   }
-  else if (command == "p") { // Pause command
-    currentState = State::PAUSED;
-    analogWrite(RPLIDAR_MOTOR, 0); // Stop motor
-    lidar.stop();
-    SendStatusMessage("Paused");
+
+  else if (command == "p") {  // Stop clearly handled
+    StopLidar();
+    SendStatusMessage("Stopped");
     SendState();
   }
   else if (command == "STATE") { // Request state command
@@ -201,107 +268,7 @@ void handleCommand(String command, String com) {
     SendStatusMessage("Unknown command received.");
   }
 }
-void applySettings(String json) {
-  StaticJsonDocument<200> doc;
-  DeserializationError error = deserializeJson(doc, json);
 
-  if (error) {
-    Serial.println("Error parsing settings!");
-    return;
-  }
-
-  if (doc.containsKey("BatchSize")) {
-    batchSize = doc["BatchSize"];
-  }
-  //if (doc.containsKey("ScanSpeed")) {
-  //  scanSpeed = doc["ScanSpeed"];
-  //}
-  //if (doc.containsKey("QualityThreshold")) {
-  //  qualityThreshold = doc["QualityThreshold"];
-  //}
-
-  SendStatusMessage("Settings updated.");
-}
-void callback(char* topic, byte* payload, unsigned int length) {
-
-  // Convert the payload into a String
-  String command = "";
-  for (unsigned int i = 0; i < length; i++) {
-    command += (char)payload[i];
-  }
-
-  String msg = "Message arrived in topic: " + String(topic) + ": " +String(command);
-  SendStatusMessage(msg);
-
-  handleCommand(command, "MQTT");
-
-
-}
-void SendStatusMessage(String msg) {
-  SendStatusMessage(msg.c_str());  // Convert `String` to `const char*`
-}
-void SendStatusMessage(const char* msg) {
-
-  String statusMessage = "Status " + String(msg);  // Append message
-
-  if (useSerial) {
-    Serial.println(statusMessage);  // Send over Serial
-  }
-  else if (useMQTT) {
-    if (!statusMessage.startsWith("State:")) {
-      mqttClient.publish(statusTopic, statusMessage.c_str());  // Send over MQTT
-    }
-  }
-  else {
-    Serial.println("No mode set \n" + statusMessage);
-  }
-}
-// Overload for numbers (int, float, double)
-void SendStatusMessage(int value) {
-  SendStatusMessage(String(value));  // Convert `int` to `String`
-}
-void SendStatusMessage(float value) {
-  SendStatusMessage(String(value, 2));  // Convert `float` to `String` (2 decimal places)
-}
-void SendStatusMessage(double value) {
-  SendStatusMessage(String(value, 2));  // Convert `double` to `String` (2 decimal places)
-}
-// Overload for boolean values
-void SendStatusMessage(bool value) {
-  SendStatusMessage(value ? "true" : "false");  // Convert `bool` to `String`
-}
-//  Overload for IPAddress
-void SendStatusMessage(IPAddress ip) {
-  String ipString = String(ip[0]) + "." +
-    String(ip[1]) + "." +
-    String(ip[2]) + "." +
-    String(ip[3]);  // Convert IPAddress to readable string
-
-  SendStatusMessage(ipString);  // Pass it to the existing function
-}
-//  Overload to send numerical values in HEX format
-void SendStatusMessage(u_result value, int format) {
-  if (format == HEX) {
-    String hexString = "0x" + String(value, HEX);  // Convert number to hex
-    SendStatusMessage(hexString.c_str());         // Call existing function
-  }
-  else {
-    SendStatusMessage(String(value).c_str());     // Convert normally
-  }
-}
-void SendState() {
-  switch (currentState) {
-  case State::IDLE:
-    SendStatusMessage("State: IDLE");
-    break;
-  case State::RUNNING:
-    SendStatusMessage("State: RUNNING");
-    break;
-  case State::PAUSED:
-    SendStatusMessage("State: PAUSED");
-    break;
-  }
-}
 void startWifiCommunication() {
   Serial.println("WiFi mode selected. Connecting...");
   server.begin();
@@ -339,14 +306,59 @@ void connectMQTT() {
     }
   }
 }
+
+
+// Clearly resets LiDAR to known idle state without auto-starting
 void resetLidar() {
   Serial.println("Resetting LiDAR...");
-  lidar.stop(); // Stop any previous operation
-  delay(1000);   // Allow some time for the LiDAR to stabilize
+
+  lidar.stop();                         // Clearly stop any ongoing operation
+  analogWrite(RPLIDAR_MOTOR, 0);        // Stop motor completely
+  delay(500);                           // Allow motor to fully stop
+
+  lidar.init();                         // Clearly reinitialize LiDAR hardware (without starting it)
+
+  currentState = State::IDLE;           // Clearly idle after reset
+  Serial.println("LiDAR reset complete. Idle and ready.");
 }
+
+// Clearly starts LiDAR scanning and motor
+bool StartLidar() {
+  Serial.println("Starting LiDAR...");
+
+  analogWrite(RPLIDAR_MOTOR, motorSpeed);  // Spin motor explicitly
+  delay(500);                              // Motor stabilization delay
+
+  LDS::result_t result = lidar.start();    // Start scanning clearly
+
+  if (result == LDS::RESULT_OK) {
+    currentState = State::RUNNING;
+    Serial.println("LiDAR started successfully.");
+    return true;
+  }
+  else {
+    Serial.print("LiDAR failed to start: ");
+    Serial.println(lidar.resultCodeToString(result));
+    analogWrite(RPLIDAR_MOTOR, 0);         // Stop motor on failure clearly
+    currentState = State::IDLE;
+    return false;
+  }
+}
+
+// Clearly stops LiDAR scanning and motor
+void StopLidar() {
+  Serial.println("Stopping LiDAR...");
+
+  lidar.stop();                         // Stop scanning explicitly
+  analogWrite(RPLIDAR_MOTOR, 0);        // Stop motor explicitly
+  currentState = State::IDLE;
+
+  Serial.println("LiDAR stopped.");
+}
+
 bool checkSerialConnection() {
-  Serial.begin(115200);
-  RPLIDAR_SERIAL.begin(115200);
+  Serial.begin(500000);
+
 
   delay(500); // Give time for Serial to initialize
 
@@ -489,172 +501,129 @@ void reconnectMQTT() {
     }
   }
 }
+
 void setup() {
-  //SendState();
+  // Start PC Serial (command communication)
+  Serial.begin(500000);
+  unsigned long serialTimeout = millis() + 3000;
+  while (!Serial && millis() < serialTimeout) {
+    ; // Wait briefly (3 sec max) for Serial connection
+  }
 
-  useSerial = false;
-  useMQTT = false;
+  if (Serial) {
+    useSerial = true;
+    Serial.println("Serial port is connected. Using Serial communication.");
+  }
+  else {
+    useSerial = false;
+    // Enable MQTT if Serial isn't available (optional logic)
+    useMQTT = true;
+  }
 
-  //  Check if LiDAR is connected via Serial
-  bool serialConnected = checkSerialConnection();
-  // Now safely initialize BNO055
+  // Initialize LiDAR Serial Port
+  RPLIDAR_SERIAL.begin(115200);
+  if (useSerial) Serial.println("LiDAR serial initialized.");
+
+  // Setup LiDAR callbacks
+  lidar.setScanPointCallback(scanPointCallback);
+  lidar.setSerialReadCallback(serialReadCallback);
+  lidar.setSerialWriteCallback(serialWriteCallback);
+  lidar.setMotorPinCallback(motorPinCallback);
+
+  // Initialize BNO055 (IMU)
   if (!bno.begin()) {
-    Serial.println("BNO055 not detected. Check wiring!");
-    while (1); // Halt execution here if sensor not found
+    if (useSerial) Serial.println("BNO055 not detected. Check wiring!");
+    while (1);
   }
   delay(1000);
   bno.setExtCrystalUse(true);
-  Serial.println("BNO055 initialized!");
-  // Store initial yaw as zero-point
+  if (useSerial) Serial.println("BNO055 initialized.");
+
+  // Capture initial yaw offset
   sensors_event_t orientationData;
   bno.getEvent(&orientationData);
   _yawOffset = orientationData.orientation.x;
+  if (useSerial) {
+    Serial.print("Yaw offset set to: ");
+    Serial.println(_yawOffset);
+  }
+
+  // LiDAR motor control setup
   pinMode(RPLIDAR_MOTOR, OUTPUT);
-  analogWrite(RPLIDAR_MOTOR, 0);
+  analogWrite(RPLIDAR_MOTOR, 0);  // Motor off initially
+
+  // Initialize LiDAR
   resetLidar();
-  lidar.begin(RPLIDAR_SERIAL);
-  useSerial = true;
+  lidar.init();
+  lidar.start();
+
+  currentState = State::RUNNING;
+
+  if (useMQTT) {
+    // Initialize MQTT (assuming WiFi is set up elsewhere)
+    reconnectMQTT();
+    if (useSerial) Serial.println("MQTT initialized.");
+  }
+
+  if (useSerial) Serial.println("Setup complete, ready for commands.");
+}
 
 
-  //if (serialConnected) {
-  //  Serial.println("LiDAR detected over Serial.");
-  //  Serial.println("Input 'q' for serial mode, 'w' for WiFi mode.");
-
-  //  while (!useSerial && !useMQTT) {
-  //    if (Serial.available() > 0) {
-
-  //      String command = Serial.readStringUntil('\n');
-  //      command.trim();
-  //      handleCommand(command, "Serial");
-  //      break;
-  //    }
-
-  //    Serial.print(".");
-  //    delay(2000);
-  //  }
-  //}
-  //else {
-  //  Serial.println("No serial connection detected. Trying WiFi mode...");
-
-  //  wifiConfigured = connectWiFi(ssid, password);
-  //  if (!wifiConfigured) {
-  //    Serial.println("No valid WiFi stored. Waiting for settings over Serial...");
-  //    waitForWiFiConfig(); // Wait for WiFi settings over Serial
-  //  }
-  //  mqttClient.loop();
-  //  useMQTT = true;
-  //  SendStatusMessage("LiDAR set to use MQTT with no serial connected");
-  //}
-  //Serial.println("Setup complete");
+// Efficient IMU yaw reading function
+float readYaw() {
+  sensors_event_t orientationData;
+  bno.getEvent(&orientationData);
+  float yaw = orientationData.orientation.x; // Assuming orientation.x is yaw
+  yaw -= _yawOffset;
+  if (yaw < 0) yaw += 360;
+  return yaw;
 }
 void loop() {
+  unsigned long now = millis();
 
-
-  // Check for c serial ommands from C# program
-
+  // Quick Serial command handling
   if (Serial.available() > 0) {
     String command = Serial.readStringUntil('\n');
     handleCommand(command, "Serial");
   }
 
-
-  if (useMQTT) {
-    // mqttloop checks for callback commands over mqtt
-
+  // Efficient MQTT handling at intervals (~50 ms)
+  if (useMQTT && (now - lastMQTTCheck >= 50)) {
+    lastMQTTCheck = now;
     if (!mqttClient.connected()) {
       Serial.println("MQTT Disconnected! Reconnecting...");
       reconnectMQTT();
     }
     mqttClient.loop();
   }
-  unsigned long now = millis();
-  float deltaTime = (now - lastTime) / 1000.0f;
-  lastTime = now;
 
-  //// Read acceleration
-  //sensors_event_t accelEvent;
-  //bno.getEvent(&accelEvent, Adafruit_BNO055::VECTOR_LINEARACCEL);
-
-  //float ax_ms2 = accelEvent.acceleration.y;
-  //float ay_ms2 = accelEvent.acceleration.x;
-
-  //bool isMoving = fabs(ax_ms2) > motionThreshold || fabs(ay_ms2) > motionThreshold;
-
-  //// 🔁 Update raw velocity only if moving
-  //if (isMoving) {
-  //  velocity.x -= ax_ms2 * deltaTime;
-  //  velocity.y += ay_ms2 * deltaTime;
-  //  lastMotionTime = now;
-  //}
-  //else {
-  //  if (now - lastMotionTime > 1000) {
-  //    velocity.x = 0;
-  //    velocity.y = 0;
-  //  }
-  //}
-
-  //// 🧹 Smooth velocity every frame
-  //vxHistory[velocityHistoryIndex] = velocity.x;
-  //vyHistory[velocityHistoryIndex] = velocity.y;
-  //velocityHistoryIndex = (velocityHistoryIndex + 1) % velocitySmoothingWindow;
-
-  //float sumX = 0, sumY = 0;
-  //for (int i = 0; i < velocitySmoothingWindow; i++) {
-  //  sumX += vxHistory[i];
-  //  sumY += vyHistory[i];
-  //}
-  //float smoothedVx = sumX / velocitySmoothingWindow;
-  //float smoothedVy = sumY / velocitySmoothingWindow;
-
-  //// 📤 Send smoothed value at interval
-  //if (now - lastVelocitySentTime >= velocitySendInterval) {
-  //  lastVelocitySentTime = now;
-  //  sendIMUVelocityPacket(Vec2{ smoothedVx, smoothedVy }, now);
-  //}
-
-  // Read and store LiDAR data in batches
-  if (currentState == State::RUNNING) {
-    if (lidar.waitPoint() == RESULT_OK) {
-      //sensors_event_t accelEvent;
-      //bno.getEvent(&accelEvent, Adafruit_BNO055::VECTOR_LINEARACCEL);
-
-      //int16_t ax = (int16_t)(accelEvent.acceleration.x * 1000);
-      //int16_t ay = (int16_t)(accelEvent.acceleration.y * 1000);
-      //int16_t az = (int16_t)(accelEvent.acceleration.z * 1000);
-
-
-
-      sensors_event_t orientationData;
-      bno.getEvent(&orientationData);
-      float currentYaw = orientationData.orientation.x - _yawOffset;
-      // Wrap to 0–360
-      if (currentYaw < 0) currentYaw += 360;
-      float rawDistance = lidar.getCurrentPoint().distance;
-      float rawAngle = lidar.getCurrentPoint().angle;
-      byte quality = lidar.getCurrentPoint().quality;
-
-      if (rawDistance > 160 && quality >= 5 && rawDistance < 3500) {
-        lidarPoints[batchIndex].angle = (uint16_t)(rawAngle * 100);
-        lidarPoints[batchIndex].distance = (uint16_t)rawDistance;
-        lidarPoints[batchIndex].quality = quality;
-        lidarPoints[batchIndex].yaw = (uint16_t)(currentYaw * 100);
-        //lidarPoints[batchIndex].vx = 0; //(velocity.x * 1000.0f);
-        //lidarPoints[batchIndex].vy = 0; //(velocity.y * 1000.0f);
-        lidarPoints[batchIndex].timestamp = now;
-
-        batchIndex++;
-
-        if (batchIndex >= batchSize) {
-          sendBatch();
-          
-          batchIndex = 0;
-        }
-      }
-    }
+  // Non-blocking IMU yaw sampling at intervals (~50 ms)
+  if (now - lastYawRead >= yawInterval) {
+    sensors_event_t orientationData;
+    bno.getEvent(&orientationData);
+    currentYaw = orientationData.orientation.x - _yawOffset;
+    if (currentYaw < 0) currentYaw += 360;
+    lastYawRead = now;
   }
 
+  switch (currentState) {
+  case State::RUNNING:
+    lidar.loop(); // Clearly call lidar loop when running
+    break;
 
+  case State::IDLE:
+    // Idle state, do nothing special
+    break;
+
+  case State::PAUSED:
+    // Handle paused state if needed
+    break;
+  }
+
+  // Add other non-blocking tasks here as necessary
 }
+
+
 void sendIMUVelocityPacket(Vec2 vel, unsigned long timestamp) {
   struct __attribute__((packed)) IMUVelocityPacket {
     uint32_t timestamp;
@@ -670,28 +639,99 @@ void sendIMUVelocityPacket(Vec2 vel, unsigned long timestamp) {
   Serial.write((uint8_t*)&pkt, sizeof(pkt));
   Serial.write(0xEF); Serial.write(0xBE); // End marker
 }
-void sendBatch() {
+void applySettings(String json) {
+  StaticJsonDocument<200> doc;
+  DeserializationError error = deserializeJson(doc, json);
 
-  const int payloadSize = batchIndex * sizeof(LidarPoint);
+  if (error) {
+    Serial.println("Error parsing settings!");
+    return;
+  }
 
-  // Pack the lidarPoints directly into payload with markers
-  payload[0] = 0xFF; // Start Marker 1
-  payload[1] = 0xAA; // Start Marker 2
-  memcpy(&payload[2], lidarPoints, payloadSize);
-  payload[payloadSize + 2] = 0xEE; // End Marker 1
-  payload[payloadSize + 3] = 0xBB; // End Marker 2
+  if (doc.containsKey("BatchSize")) {
+    BATCH_SIZE = doc["BatchSize"];
+  }
+
+  SendStatusMessage("Settings updated.");
+}
+void callback(char* topic, byte* payload, unsigned int length) {
+
+  // Convert the payload into a String
+  String command = "";
+  for (unsigned int i = 0; i < length; i++) {
+    command += (char)payload[i];
+  }
+
+  String msg = "Message arrived in topic: " + String(topic) + ": " + String(command);
+  SendStatusMessage(msg);
+
+  handleCommand(command, "MQTT");
+
+
+}
+void SendStatusMessage(String msg) {
+  SendStatusMessage(msg.c_str());  // Convert `String` to `const char*`
+}
+void SendStatusMessage(const char* msg) {
+
+  String statusMessage = "Status " + String(msg);  // Append message
 
   if (useSerial) {
-    Serial.write(payload, payloadSize + 4);
-    Serial.flush();
+    Serial.println(statusMessage);  // Send over Serial
   }
   else if (useMQTT) {
-    bool success = mqttClient.publish(dataTopic, &payload[2], payloadSize);
-    if (!success) {
-      Serial.println("MQTT Publish Failed!");
+    if (!statusMessage.startsWith("State:")) {
+      mqttClient.publish(statusTopic, statusMessage.c_str());  // Send over MQTT
     }
   }
-  batchIndex = 0;
+  else {
+    Serial.println("No mode set \n" + statusMessage);
+  }
+}
+// Overload for numbers (int, float, double)
+void SendStatusMessage(int value) {
+  SendStatusMessage(String(value));  // Convert `int` to `String`
+}
+void SendStatusMessage(float value) {
+  SendStatusMessage(String(value, 2));  // Convert `float` to `String` (2 decimal places)
+}
+void SendStatusMessage(double value) {
+  SendStatusMessage(String(value, 2));  // Convert `double` to `String` (2 decimal places)
+}
+// Overload for boolean values
+void SendStatusMessage(bool value) {
+  SendStatusMessage(value ? "true" : "false");  // Convert `bool` to `String`
+}
+//  Overload for IPAddress
+void SendStatusMessage(IPAddress ip) {
+  String ipString = String(ip[0]) + "." +
+    String(ip[1]) + "." +
+    String(ip[2]) + "." +
+    String(ip[3]);  // Convert IPAddress to readable string
+
+  SendStatusMessage(ipString);  // Pass it to the existing function
+}
+//  Overload to send numerical values in HEX format
+void SendStatusMessage(LDS::result_t value, bool asHex = false) {
+  if (asHex) {
+    SendStatusMessage("0x" + String((int)value, HEX));
+  }
+  else {
+    SendStatusMessage(lidar.resultCodeToString(value));
+  }
+}
+void SendState() {
+  switch (currentState) {
+  case State::IDLE:
+    SendStatusMessage("State: IDLE");
+    break;
+  case State::RUNNING:
+    SendStatusMessage("State: RUNNING");
+    break;
+  case State::PAUSED:
+    SendStatusMessage("State: PAUSED");
+    break;
+  }
 }
 
 
