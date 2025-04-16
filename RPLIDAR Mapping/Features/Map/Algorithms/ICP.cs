@@ -13,7 +13,6 @@ using RPLIDAR_Mapping.Models;
 using RPLIDAR_Mapping.Providers;
 using RPLIDAR_Mapping.Utilities;
 
-using static RPLIDAR_Mapping.Features.Map.Algorithms.DevicePositionEstimator;
 
 
 public class ICP

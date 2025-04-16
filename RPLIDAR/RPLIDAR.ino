@@ -1,4 +1,21 @@
 ﻿
+#include <lds_all_models.h>
+#include <LDS_CAMSENSE_X1.h>
+#include <LDS_DELTA_2A_115200.h>
+#include <LDS_DELTA_2A_230400.h>
+#include <LDS_DELTA_2B.h>
+#include <LDS_DELTA_2G.h>
+#include <LDS_LDROBOT_LD14P.h>
+#include <LDS_LDS02RR.h>
+#include <LDS_NEATO_XV11.h>
+#include <LDS_YDLIDAR_SCL.h>
+#include <LDS_YDLIDAR_X2_X2L.h>
+#include <LDS_YDLIDAR_X3.h>
+#include <LDS_YDLIDAR_X3_PRO.h>
+#include <LDS_YDLIDAR_X4.h>
+#include <LDS_YDLIDAR_X4_PRO.h>
+#include <PID_v1_0_0.h>
+#include <LDS.h>
 #include <LDS_RPLIDAR_A1.h>
 
 
@@ -161,10 +178,36 @@ size_t serialWriteCallback(const uint8_t* buffer, size_t length) {
   return Serial1.write(buffer, length);
 }
 
-// Motor pin callback (if required)
 void motorPinCallback(float value, LDS::lds_pin_t pin) {
-  // Optional PWM motor control if hardware supports it
+  //// Always control pin 3, no matter what the library says
+  //pinMode(RPLIDAR_MOTOR, OUTPUT);
+
+  //if (value == LDS::DIR_OUTPUT_PWM) {
+  //  // Ignore – setup already handled
+  //  return;
+  //}
+
+  //if (value == LDS::DIR_OUTPUT_CONST) {
+  //  // Ignore – setup already handled
+  //  return;
+  //}
+
+  //if (value == LDS::VALUE_LOW) {
+  //  analogWrite(RPLIDAR_MOTOR, 0);  // Stop motor
+  //  return;
+  //}
+
+  //if (value == LDS::VALUE_HIGH) {
+  //  analogWrite(RPLIDAR_MOTOR, 255);  // Full power
+  //  return;
+  //}
+
+  //if (value >= 0.0f && value <= 1.0f) {
+  //  analogWrite(RPLIDAR_MOTOR, int(value * 255));
+  //}
 }
+
+
 
 void sendBatch() {
   const int payloadSize = batchIndex * sizeof(LidarPoint);
@@ -188,7 +231,7 @@ void sendBatch() {
     // Send only raw data portion (without markers) over MQTT
     bool success = mqttClient.publish(dataTopic, &payload[2], payloadSize);
     if (!success && useSerial) {
-      Serial.println("MQTT Publish Failed!");
+      SendStatusMessage("MQTT Publish Failed!");
     }
   }
 
@@ -270,114 +313,119 @@ void handleCommand(String command, String com) {
 }
 
 void startWifiCommunication() {
-  Serial.println("WiFi mode selected. Connecting...");
+  SendStatusMessage("WiFi mode selected. Connecting...");
   server.begin();
   wifiConfigured = connectWiFi(ssid, password);
 
   if (!wifiConfigured) {
-    Serial.println("No valid WiFi stored. Waiting for settings over Serial...");
+    SendStatusMessage("No valid WiFi stored. Waiting for settings over Serial...");
     waitForWiFiConfig(); // Wait for new settings
   }
 
   mqttClient.loop();
   useMQTT = true;
   SendStatusMessage("LiDAR set to use MQTT");
-  Serial.println("LiDAR set to use MQTT");
+  SendStatusMessage("LiDAR set to use MQTT");
 }
 void connectMQTT() {
   while (!mqttClient.connected()) {
-    Serial.print("Attempting MQTT connection...");
+    SendStatusMessage("Attempting MQTT connection...");
 
     // Attempt to connect
     if (mqttClient.connect("MKR1010Client")) { 
-      Serial.println("Connected to MQTT broker!");
+      SendStatusMessage("Connected to MQTT broker!");
 
       // Subscribe to the command topic
       mqttClient.subscribe(commandTopic);
-      Serial.println("Subscribed to command topic: " + String(commandTopic));
+      SendStatusMessage("Subscribed to command topic: " + String(commandTopic));
 
       useMQTT = true;
     }
     else {
-      Serial.print("Failed, rc=");
-      Serial.print(mqttClient.state()); // Print the connection error code
-      Serial.println(" Retrying in 5 seconds...");
+      SendStatusMessage("Failed, rc=");
+      SendStatusMessage(mqttClient.state()); // Print the connection error code
+      SendStatusMessage(" Retrying in 5 seconds...");
       delay(5000); // Wait before retrying
     }
   }
 }
 
 
-// Clearly resets LiDAR to known idle state without auto-starting
-void resetLidar() {
-  Serial.println("Resetting LiDAR...");
+void StopLidar() {
+  SendStatusMessage("Stopping LiDAR...");
 
-  lidar.stop();                         // Clearly stop any ongoing operation
-  analogWrite(RPLIDAR_MOTOR, 0);        // Stop motor completely
-  delay(500);                           // Allow motor to fully stop
+  lidar.stop();  // Stop scanning
+  analogWrite(RPLIDAR_MOTOR, 0);  // Manually stop motor
+  currentState = State::IDLE;
 
-  lidar.init();                         // Clearly reinitialize LiDAR hardware (without starting it)
-
-  currentState = State::IDLE;           // Clearly idle after reset
-  Serial.println("LiDAR reset complete. Idle and ready.");
+  SendStatusMessage("LiDAR stopped.");
 }
 
-// Clearly starts LiDAR scanning and motor
+
+
+
 bool StartLidar() {
-  Serial.println("Starting LiDAR...");
+  SendStatusMessage("Starting LiDAR...");
 
-  analogWrite(RPLIDAR_MOTOR, motorSpeed);  // Spin motor explicitly
-  delay(500);                              // Motor stabilization delay
+  pinMode(RPLIDAR_MOTOR, OUTPUT);
+  analogWrite(RPLIDAR_MOTOR, motorSpeed);  // Manually start motor
+  delay(1500);  // Let it spin up
 
-  LDS::result_t result = lidar.start();    // Start scanning clearly
+  LDS::result_t result = lidar.start();  // Library will now succeed
 
   if (result == LDS::RESULT_OK) {
     currentState = State::RUNNING;
-    Serial.println("LiDAR started successfully.");
+    SendStatusMessage("✅ LiDAR started successfully.");
     return true;
   }
-  else {
-    Serial.print("LiDAR failed to start: ");
-    Serial.println(lidar.resultCodeToString(result));
-    analogWrite(RPLIDAR_MOTOR, 0);         // Stop motor on failure clearly
-    currentState = State::IDLE;
-    return false;
-  }
-}
 
-// Clearly stops LiDAR scanning and motor
-void StopLidar() {
-  Serial.println("Stopping LiDAR...");
-
-  lidar.stop();                         // Stop scanning explicitly
-  analogWrite(RPLIDAR_MOTOR, 0);        // Stop motor explicitly
+  SendStatusMessage("❌ LiDAR failed to start. Code: " + String(result));
+  SendStatusMessage("↪ " + lidar.resultCodeToString(result));
+  analogWrite(RPLIDAR_MOTOR, 0);  // Stop motor if failed
   currentState = State::IDLE;
-
-  Serial.println("LiDAR stopped.");
+  return false;
 }
+
+
+
+void resetLidar() {
+  SendStatusMessage("Resetting LiDAR...");
+
+  lidar.stop();  // Stop scanning (library function)
+  analogWrite(RPLIDAR_MOTOR, 0);  // Manually stop motor
+  delay(500);
+
+  while (RPLIDAR_SERIAL.available()) RPLIDAR_SERIAL.read();  // Clear RX buffer
+
+  lidar.init();  // ✅ Call only once per full reset
+
+  currentState = State::IDLE;
+  SendStatusMessage("LiDAR reset complete.");
+}
+
 
 bool checkSerialConnection() {
   Serial.begin(500000);
 
 
-  delay(500); // Give time for Serial to initialize
+  delay(1000); // Give time for Serial to initialize
 
   if (Serial) {  //  Checks if the Serial connection is active
-    Serial.println("Serial port is connected!");
+    SendStatusMessage("Serial port is connected!");
     return true;
   }
 
-  Serial.println("Serial port not detected.");
+  SendStatusMessage("Serial port not detected.");
   return false;
 }
 bool connectWiFi(const char* ssid, const char* password) {
   int attempts = 0;
-  Serial.println("Using WiFi mode...");
-  Serial.println(ssid);Serial.println(password);
+  SendStatusMessage("Using WiFi mode...");
+  SendStatusMessage(ssid);SendStatusMessage(password);
   WiFi.begin(ssid, password);
   while (WiFi.status() != WL_CONNECTED && attempts < 10) {
     delay(1000);
-    Serial.print(".");
+    SendStatusMessage(".");
     attempts++;
   }
   if (WiFi.status() == WL_CONNECTED) {
@@ -408,8 +456,8 @@ void waitForWiFiConfig() {
   String newSSID = "";
   String newPassword = "";
 
-  Serial.println("Send WiFi credentials in format: SET_WIFI:SSID,PASSWORD");
-  Serial.println("type c to skip and use serial");
+  SendStatusMessage("Send WiFi credentials in format: SET_WIFI:SSID,PASSWORD");
+  SendStatusMessage("type c to skip and use serial");
 
   while (true) {
     if (Serial.available()) {
@@ -422,10 +470,10 @@ void waitForWiFiConfig() {
           newSSID = input.substring(9, commaIndex);
           newPassword = input.substring(commaIndex + 1);
 
-          Serial.println("Received New WiFi Credentials!");
+          SendStatusMessage("Received New WiFi Credentials!");
           //saveWiFiSettings(newSSID.c_str(), newPassword.c_str());
 
-          Serial.println("Restarting to apply new settings...");
+          SendStatusMessage("Restarting to apply new settings...");
           delay(2000);
           NVIC_SystemReset(); // Restart the board
         }
@@ -439,64 +487,25 @@ void waitForWiFiConfig() {
     delay(100);
   }
 }
-//void saveWiFiSettings(const char* newSSID, const char* newPassword) {
-//  Serial.println("Saving WiFi credentials to EEPROM...");
-//
-//  //  Write SSID
-//  for (int i = 0; i < MAX_SSID_LENGTH; i++) {
-//    EEPROM.write(EEPROM_SSID_ADDR + i, newSSID[i]);
-//    if (newSSID[i] == '\0') break;  // Stop at null terminator
-//  }
-//
-//  //  Write Password
-//  for (int i = 0; i < MAX_PASS_LENGTH; i++) {
-//    EEPROM.write(EEPROM_PASS_ADDR + i, newPassword[i]);
-//    if (newPassword[i] == '\0') break;  // Stop at null terminator
-//  }
-//
-//  EEPROM.commit();  //  Ensure data is written
-//  Serial.println("Restarting to apply new settings...");
-//  delay(2000);
-//  NVIC_SystemReset();  //  Restart board
-//}
-//void loadWiFiSettings(char* ssid, char* password) {
-//  Serial.println(" Loading stored WiFi credentials...");
-//
-//  //  Read SSID
-//  for (int i = 0; i < MAX_SSID_LENGTH; i++) {
-//    ssid[i] = EEPROM.read(EEPROM_SSID_ADDR + i);
-//    if (ssid[i] == '\0') break;  // Stop at null terminator
-//  }
-//
-//  //  Read Password
-//  for (int i = 0; i < MAX_PASS_LENGTH; i++) {
-//    password[i] = EEPROM.read(EEPROM_PASS_ADDR + i);
-//    if (password[i] == '\0') break;  // Stop at null terminator
-//  }
-//
-//  Serial.print(" Stored SSID: ");
-//  Serial.println(ssid);
-//  Serial.print(" Stored Password: ");
-//  Serial.println(password);
-//}
+
 void checkForTimeout() {
   if (millis() - lastKeepAliveTime > timeout) {
-    Serial.println("MonoGame is not responding, shutting down LiDAR...");
+    SendStatusMessage("MonoGame is not responding, shutting down LiDAR...");
     analogWrite(RPLIDAR_MOTOR, 0);
     resetLidar();
   }
 }
 void reconnectMQTT() {
   while (!mqttClient.connected()) {
-    Serial.println("Attempting MQTT Reconnection...");
+    SendStatusMessage("Attempting MQTT Reconnection...");
     if (mqttClient.connect("LidarClient")) {  // Replace with a unique ID if needed
-      Serial.println("MQTT Reconnected!");
+      SendStatusMessage("MQTT Reconnected!");
       mqttClient.subscribe("lidar/commands");  //Re-subscribe to any necessary topics
       mqttClient.setBufferSize(512);
     }
     else {
-      Serial.print("MQTT Reconnection Failed, Error Code: ");
-      Serial.println(mqttClient.state());
+      SendStatusMessage("MQTT Reconnection Failed, Error Code: ");
+      SendStatusMessage(mqttClient.state());
       delay(5000);  // Wait before retrying
     }
   }
@@ -504,15 +513,18 @@ void reconnectMQTT() {
 
 void setup() {
   // Start PC Serial (command communication)
-  Serial.begin(500000);
-  unsigned long serialTimeout = millis() + 3000;
-  while (!Serial && millis() < serialTimeout) {
-    ; // Wait briefly (3 sec max) for Serial connection
-  }
+// Setup
 
-  if (Serial) {
+  //Serial.begin(500000);
+  //unsigned long serialTimeout = millis() + 3000;
+  //while (!Serial && millis() < serialTimeout) {
+  //  ; // Wait briefly (3 sec max) for Serial connection
+  //}
+
+  //if (Serial) {
+  if (checkSerialConnection) {
     useSerial = true;
-    Serial.println("Serial port is connected. Using Serial communication.");
+    SendStatusMessage("Serial port is connected. Using Serial communication.");
   }
   else {
     useSerial = false;
@@ -522,50 +534,54 @@ void setup() {
 
   // Initialize LiDAR Serial Port
   RPLIDAR_SERIAL.begin(115200);
-  if (useSerial) Serial.println("LiDAR serial initialized.");
+  if (useSerial) SendStatusMessage("LiDAR serial initialized.");
 
   // Setup LiDAR callbacks
   lidar.setScanPointCallback(scanPointCallback);
   lidar.setSerialReadCallback(serialReadCallback);
   lidar.setSerialWriteCallback(serialWriteCallback);
   lidar.setMotorPinCallback(motorPinCallback);
+  lidar.setErrorCallback(handleLdsError);
+  lidar.setInfoCallback(handleLdsInfo);
 
   // Initialize BNO055 (IMU)
   if (!bno.begin()) {
-    if (useSerial) Serial.println("BNO055 not detected. Check wiring!");
+    if (useSerial) SendStatusMessage("BNO055 not detected. Check wiring!");
     while (1);
   }
   delay(1000);
   bno.setExtCrystalUse(true);
-  if (useSerial) Serial.println("BNO055 initialized.");
+  if (useSerial) SendStatusMessage("BNO055 initialized.");
 
   // Capture initial yaw offset
   sensors_event_t orientationData;
   bno.getEvent(&orientationData);
   _yawOffset = orientationData.orientation.x;
   if (useSerial) {
-    Serial.print("Yaw offset set to: ");
-    Serial.println(_yawOffset);
+    SendStatusMessage("Yaw offset set to: ");
+    SendStatusMessage(_yawOffset);
   }
 
-  // LiDAR motor control setup
+  //// LiDAR motor control setup
   pinMode(RPLIDAR_MOTOR, OUTPUT);
   analogWrite(RPLIDAR_MOTOR, 0);  // Motor off initially
 
   // Initialize LiDAR
-  resetLidar();
+  //resetLidar();
   lidar.init();
-  lidar.start();
+  //lidar.start();
 
-  currentState = State::RUNNING;
+  currentState = State::IDLE;
 
   if (useMQTT) {
     // Initialize MQTT (assuming WiFi is set up elsewhere)
     reconnectMQTT();
-    if (useSerial) Serial.println("MQTT initialized.");
+    if (useSerial) SendStatusMessage("MQTT initialized.");
   }
 
-  if (useSerial) Serial.println("Setup complete, ready for commands.");
+  if (useSerial) SendStatusMessage("Setup complete, ready for commands.");
+  Serial.flush();
+  delay(200);
 }
 
 
@@ -591,7 +607,7 @@ void loop() {
   if (useMQTT && (now - lastMQTTCheck >= 50)) {
     lastMQTTCheck = now;
     if (!mqttClient.connected()) {
-      Serial.println("MQTT Disconnected! Reconnecting...");
+      SendStatusMessage("MQTT Disconnected! Reconnecting...");
       reconnectMQTT();
     }
     mqttClient.loop();
@@ -644,7 +660,7 @@ void applySettings(String json) {
   DeserializationError error = deserializeJson(doc, json);
 
   if (error) {
-    Serial.println("Error parsing settings!");
+    SendStatusMessage("Error parsing settings!");
     return;
   }
 
@@ -677,7 +693,8 @@ void SendStatusMessage(const char* msg) {
   String statusMessage = "Status " + String(msg);  // Append message
 
   if (useSerial) {
-    Serial.println(statusMessage);  // Send over Serial
+    Serial.write(msg);
+    Serial.write('\n');
   }
   else if (useMQTT) {
     if (!statusMessage.startsWith("State:")) {
@@ -685,7 +702,7 @@ void SendStatusMessage(const char* msg) {
     }
   }
   else {
-    Serial.println("No mode set \n" + statusMessage);
+    SendStatusMessage("No mode set \n" + statusMessage);
   }
 }
 // Overload for numbers (int, float, double)
@@ -733,6 +750,15 @@ void SendState() {
     break;
   }
 }
+void handleLdsError(LDS::result_t code, String aux) {
+  SendStatusMessage("🔴 LDS error: " + code + aux);
+
+}
+void handleLdsInfo(LDS::info_t code, String value) {
+  SendStatusMessage("ℹ️ LDS info: " + lidar.infoCodeToString(code) + " = " + value);
+
+}
+
 
 
 

@@ -14,6 +14,7 @@ using RPLIDAR_Mapping.Core;
 using RPLIDAR_Mapping.Features.Map.Algorithms;
 using RPLIDAR_Mapping.Providers;
 using static RPLIDAR_Mapping.Features.Map.Map;
+using SharpDX.Mathematics.Interop;
 
 
 
@@ -169,8 +170,11 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
 
           // ➕ Add to angle-indexed ring tile dictionary
           float angleDeg = MathHelper.ToDegrees(point.Radians) % 360f;
+
           if (angleDeg < 0) angleDeg += 360f;
           int angleKey = (int)(angleDeg * 10); // 0–3599
+
+
 
           var dict = UtilityProvider.Map.EstablishedRingTilesByAngle;
           if (!dict.TryGetValue(angleKey, out var tileList))
@@ -178,6 +182,12 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
             tileList = new List<Tile>();
             dict[angleKey] = tileList;
           }
+          float rawAngle = point.Angle; // 0–360
+          int rawAngleKey = (int)(rawAngle * 10) % 3600;
+          if (!UtilityProvider.Map._establishedOriginalPointsByRawAngle.TryGetValue(angleKey, out var list))
+            UtilityProvider.Map._establishedOriginalPointsByRawAngle[angleKey] = list = new List<Tile>();
+
+          list.Add(tile);
           tileList.Add(tile);
         }
 

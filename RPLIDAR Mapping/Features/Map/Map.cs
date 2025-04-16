@@ -18,7 +18,6 @@ using RPLIDAR_Mapping.Models;
 using RPLIDAR_Mapping.Providers;
 using RPLIDAR_Mapping.Utilities;
 
-using static RPLIDAR_Mapping.Features.Map.Algorithms.DevicePositionEstimator;
 
 
 
@@ -38,6 +37,7 @@ namespace RPLIDAR_Mapping.Features.Map
     private FPSCounter _fpsCounter;
     public TileTrustRegulator _tileTrustRegulator;
     public HashSet<int> observedAngles = new();
+    public MotionEstimator MotionEstimator = new();
     public TileMerge _tileMerge { get; private set; }
     public InputManager InputManager { get; set; }
     //public List<(Vector2 Start, Vector2 End, float AngleDegrees, float AngleRadians, bool IsPermanent)> PermanentLines = new();
@@ -48,6 +48,7 @@ namespace RPLIDAR_Mapping.Features.Map
     public Dictionary<int, List<(MapPoint, MapPoint)>> PreviousRingPointPairs = new();
     public Dictionary<int, List<(MapPoint, MapPoint)>> CurrentRingPairs = new();
     public Dictionary<int, List<Tile>> EstablishedRingTilesByAngle { get; private set; } = new();
+    public Dictionary<int, List<Tile>> _establishedOriginalPointsByRawAngle = new();
     private Vector2 _previousOffset = Vector2.Zero;
     public Dictionary<int, (Vector2 inferred, Vector2 origin)> PreviousRingVectors = new();
     private List<MapPoint> AddedPoints = new();
@@ -74,6 +75,8 @@ namespace RPLIDAR_Mapping.Features.Map
     {
       Idle,
       AddingNewPoints,
+      EstimateDevicePosition,
+      SimulateDevicePosition,
       UpdateDevicePosition,
       DistributePoints,
       UpdatingTiles,
@@ -162,44 +165,67 @@ namespace RPLIDAR_Mapping.Features.Map
             MatchedTileCount = 0;
             MismatchedTileCount = 0;
             _fpsCounter.IncrementLiDARUpdate();
-            _currentState = MapUpdateState.AddingNewPoints;
+            _currentState = MapUpdateState.EstimateDevicePosition;
           }
+          break;
+
+
+
+        case MapUpdateState.EstimateDevicePosition:
+          {
+            var allRingTiles = _gridManager.GetAllRingTiles();
+            if (allRingTiles.Count == 0)
+            {
+              Debug.WriteLine("🕒 Skipping offset estimation — no established ring tiles yet.");
+              _currentState = MapUpdateState.UpdateDevicePosition;
+              break;
+            }
+
+            //var newInferredPoints = AddedPoints.Where(p => p.IsInferredRingPoint).ToList();
+            //Vector2 offset = EstimateOffsetFromRingTiles(_pointsBuffer, EstablishedRingTilesByAngle);
+            // Initial estimation
+            //Vector2 initialOffset = EstimateOffsetFromRingTiles(_pointsBuffer, EstablishedRingTilesByAngle);
+            //ApplyIndividualRingOffsets(_pointsBuffer, EstablishedRingTilesByAngle);
+            //Vector2 initialOffset = EstimateOffsetFromRingTilesRawAngleMatch(_pointsBuffer, _establishedOriginalPointsByRawAngle);
+            Vector2 offset = MotionEstimator.EstimateDeviceOffsetFromAngleHistory(_pointsBuffer);
+            _device._devicePosition += offset;
+            //if (initialOffset != Vector2.Zero)
+            //{
+            //  _device._devicePosition += initialOffset;
+            //  _currentState = MapUpdateState.UpdateDevicePosition;
+            //  _gridManager.ResetAllRingTiles();
+            //  break;
+            //}
+
+
+            _currentState = MapUpdateState.AddingNewPoints;
+            break;
+          }
+        case MapUpdateState.UpdateDevicePosition:
+         // // Simulate adding points at estimated position
+         // List<MapPoint> simulatedRingPoints = SimulateAddingPoints(_pointsBuffer, _device._devicePosition);
+
+         // //Step 3: calculate corrective offset to center ring back to origin
+         //Vector2 correctiveOffset = CalculateAngleLockedRingCorrection(_pointsBuffer, EstablishedRingTilesByAngle, _device._devicePosition);
+
+         // //Apply corrective offset 
+
+         // if (correctiveOffset != Vector2.Zero)
+         // {
+         //   _device._devicePosition += correctiveOffset;
+         //   //UtilityProvider.Camera.CenterOn(_device._devicePosition);
+         //   _gridManager.ResetAllRingTiles(); // Clear outdated ones after motion
+         // }
+          _currentState = MapUpdateState.AddingNewPoints;
           break;
 
         case MapUpdateState.AddingNewPoints:
           NewTiles.Clear();
           AddPoints(_pointsBuffer);
           _tileMerge.CurrentState = TileMerge.MergeState.NewPointsAdded;
-
-          _currentState = MapUpdateState.UpdateDevicePosition;
+          _pointsBuffer.Clear();
+          _currentState = MapUpdateState.DistributePoints;
           break;
-
-        case MapUpdateState.UpdateDevicePosition:
-          {
-            //var allRingTiles = _gridManager.GetAllRingTiles();
-            //if (allRingTiles.Count == 0)
-            //{
-            //  Debug.WriteLine("🕒 Skipping offset estimation — no established ring tiles yet.");
-            //  _currentState = MapUpdateState.DistributePoints;
-            //  break;
-            //}
-
-            //var newInferredPoints = AddedPoints.Where(p => p.IsInferredRingPoint).ToList();
-            //Vector2 offset = EstimateOffsetFromRingTiles(_pointsBuffer, EstablishedRingTilesByAngle);
-
-            //if (offset != Vector2.Zero)
-            //{
-            //  _device._devicePosition += offset;
-            //  UtilityProvider.Camera.CenterOn(_device._devicePosition);
-            //  _gridManager.ResetAllRingTiles(); // Clear outdated ones after motion
-            //}
-
-            _pointsBuffer.Clear();
-            _currentState = MapUpdateState.DistributePoints;
-            break;
-          }
-
-
 
 
 
@@ -243,101 +269,37 @@ namespace RPLIDAR_Mapping.Features.Map
       }
       return IsUpdated;
     }
-    private bool IsValidRingMatch(Vector2 oldInferred, Vector2 oldOrigin, Vector2 newInferred, Vector2 newOrigin,
-                               float maxDelta, float maxDistanceChange)
+    public void ApplyIndividualRingOffsets(
+    List<DataPoint> currentBatch,
+    Dictionary<int, List<Tile>> angleToTilesDict)
     {
-      Vector2 oldVector = oldInferred - oldOrigin;
-      Vector2 newVector = newInferred - newOrigin;
-      Vector2 delta = oldVector - newVector;
+      const float maxMatchingDistance = 50f;
 
-      float distanceChange = MathF.Abs(oldVector.Length() - newVector.Length());
-      float individualDelta = delta.Length();
-
-      if (individualDelta > maxDelta)
-        return false;
-
-      if (distanceChange > maxDistanceChange)
-        return false;
-
-      return true;
-    }
-    public Vector2 EstimateOffsetFromRingTiles(
-      List<DataPoint> currentBatch,
-      Dictionary<int, List<Tile>> angleToTilesDict)
-    {
-      const float maxMatchingDistance = 50f;       // mm
-      const float maxOffsetPerUpdate = 100f;       // mm
-      const int minMatchesRequired = 10;
-      const float maxIndividualDelta = 5f;         // mm
-      const float maxDistanceDifference = 10f;     // mm — reject if device→tile distance changes too much
-      const float maxAllowedDistanceDelta = 20f;   // mm — tweak as needed
-      const float smoothingFactor = 0.1f;          // reduced to lessen long-term drift
-      const float minOffsetThreshold = 0.35f;      // mm – ignore sub-millimeter drift
-      const float maxInferredExtensionError = 20f; // mm
-      var deltas = new List<Vector2>();
-      //Debug.WriteLine($"Offset estimate based on: {_device._devicePosition}");
       foreach (var dp in currentBatch)
       {
-        if (dp.Distance >= 3500) continue; // Only use inferred ring points
+        if (dp.Distance >= 3500) continue;
 
-        float angleRad = MathHelper.ToRadians(dp.Angle + dp.Yaw);
         Vector2 origin = dp.OriginalDevicePosition;
+        float angleRad = MathHelper.ToRadians(dp.Angle + dp.Yaw);
 
-        // Convert origin to the tile center to match tile system
-        int tileSize = 10;
-        Vector2 originTile = new(
-          MathF.Floor(origin.X / tileSize) * tileSize + tileSize / 2f,
-          MathF.Floor(origin.Y / tileSize) * tileSize + tileSize / 2f
+        Vector2 inferred = origin + new Vector2(
+            MathF.Cos(angleRad) * 3500,
+            MathF.Sin(angleRad) * 3500
         );
 
-        // Compute the expected ring hit location (3500mm along adjusted beam direction)
-        Vector2 inferred = originTile + new Vector2(
-          MathF.Cos(angleRad) * 3500,
-          MathF.Sin(angleRad) * 3500
-        );
+        int angleKey = (int)(MathHelper.ToDegrees(angleRad) * 10) % 3600;
+        if (angleKey < 0) angleKey += 3600;
 
-        // Adjusted angle key for tile lookup
-        int adjustedAngleKey = (int)(MathHelper.ToDegrees(angleRad) * 10) % 3600;
-        if (adjustedAngleKey < 0) adjustedAngleKey += 3600;
-
-        // Raw angle key for previous distance match
-        int rawAngleKey = (int)(dp.Angle * 10) % 3600;
-        if (rawAngleKey < 0) rawAngleKey += 3600;
-
-        if (!angleToTilesDict.TryGetValue(adjustedAngleKey, out var tileList) || tileList.Count == 0)
+        if (!angleToTilesDict.TryGetValue(angleKey, out var tileList))
           continue;
 
-        // Distance consistency check
-        float inferredDistance = 3500f;
-        if (_previousInferredDistances.TryGetValue(rawAngleKey, out float previousDistance))
-        {
-          float deltaDistance = Math.Abs(inferredDistance - previousDistance);
-          if (deltaDistance > maxAllowedDistanceDelta)
-          {
-            Debug.WriteLine($"🚫 Δdistance too large at angle {rawAngleKey / 10f:F1}°: {deltaDistance:F1}mm");
-            continue;
-          }
-        }
-        // Expected distance from hit to inferred point
-        float expectedExtension = 3500f - dp.Distance;
-        Vector2 actualHitPoint = origin + new Vector2(
-            MathF.Cos(angleRad) * dp.Distance,
-            MathF.Sin(angleRad) * dp.Distance
-        );
-        float actualExtension = Vector2.Distance(actualHitPoint, inferred);
-
-        float extensionError = Math.Abs(actualExtension - expectedExtension);
-        if (extensionError > maxInferredExtensionError)  // e.g., 5mm
-        {
-          Debug.WriteLine($"🚫 Inferred ring extension mismatch at angle {dp.Angle:F1}°: Δextension = {extensionError:F1}mm");
-          continue;
-        }
-
-        // Find best matching tile near the inferred ring point
         Tile bestTile = null;
         float bestDist = float.MaxValue;
+
         foreach (var tile in tileList)
         {
+          if (tile.InferredBy == null) continue;
+
           float dist = Vector2.Distance(inferred, tile.GlobalCenter);
           if (dist < bestDist && dist <= maxMatchingDistance)
           {
@@ -348,47 +310,250 @@ namespace RPLIDAR_Mapping.Features.Map
 
         if (bestTile == null) continue;
 
-        Vector2 delta = bestTile.GlobalCenter - inferred;
-        //Vector2 rawDelta = bestTile.GlobalCenter - inferred;
-        //Vector2 delta = new Vector2(rawDelta.X + 1.5f, rawDelta.Y + 1.5f);
-        // Check if the distance to tile matches the ring length
-        float distFromDeviceToTile = Vector2.Distance(originTile, bestTile.GlobalCenter);
-        float distDiff = Math.Abs(distFromDeviceToTile - 3500f);
-        if (distDiff > maxDistanceDifference)
-        {
-          // Debug.WriteLine($"🚫 Distance check failed at angle {adjustedAngleKey / 10f:F1}°: Δdistance = {distDiff:F1}mm");
-          continue;
-        }
+        Vector2 oldRing = bestTile.GlobalCenter;
+        Vector2 oldOrigin = bestTile.InferredBy.EqTileGlobalCenter;
 
-        if (delta.Length() > maxIndividualDelta)
-        {
-          // Debug.WriteLine($"🚫 Delta too large at angle {adjustedAngleKey / 10f:F1}°: Δoffset = {delta.Length():F1}mm");
-          continue;
-        }
+        float oldDistance = Vector2.Distance(oldRing, oldOrigin);
+        float newDistance = Vector2.Distance(inferred, dp.EqTileGlobalCenter);
 
-        deltas.Add(delta);
-        // Debug.WriteLine($"✅ Match at angle {adjustedAngleKey / 10f:F1}°, Δoffset = {delta}");
-        _previousInferredDistances[rawAngleKey] = inferredDistance; // update last seen distance
+        float deltaDistance = newDistance - oldDistance;
+        Vector2 direction = Vector2.Normalize(inferred - dp.EqTileGlobalCenter);
+        Vector2 offset = direction * deltaDistance;
+
+        if (offset.Length() > maxMatchingDistance)
+          continue;
+
+        // 👇 Apply correction directly
+        dp.OriginalDevicePosition += offset;
+      }
+    }
+
+    public Vector2 CalculateAngleLockedRingCorrection(
+        List<DataPoint> currentBatch,
+        Dictionary<int, List<Tile>> angleToTilesDict,
+        Vector2 currentDevicePosition)
+    {
+      const float maxMatchingDistance = 50f;
+      const int minRequiredMatches = 5;
+
+      List<Vector2> offsets = new();
+
+      foreach (var dp in currentBatch)
+      {
+        if (dp.Distance != 3500) continue; // Skip clamped ones
+
+        float yaw = MathHelper.ToRadians(dp.Yaw);
+        float raw = MathHelper.ToRadians(dp.Angle);
+        float adjustedAngle = raw + yaw;
+
+        Vector2 inferred = currentDevicePosition + new Vector2(
+            MathF.Cos(adjustedAngle) * 3500,
+            MathF.Sin(adjustedAngle) * 3500
+        );
+
+        int angleKey = (int)(MathHelper.ToDegrees(adjustedAngle) * 10) % 3600;
+        if (angleKey < 0) angleKey += 3600;
+
+        if (!angleToTilesDict.TryGetValue(angleKey, out var tileList) || tileList.Count == 0)
+          continue;
+
+        // Find closest tile for this angle
+        Tile closest = tileList
+            .OrderBy(t => Vector2.Distance(t.GlobalCenter, inferred))
+            .FirstOrDefault();
+
+        if (closest == null) continue;
+
+        Vector2 offset = closest.GlobalCenter - inferred;
+
+        if (offset.Length() > maxMatchingDistance)
+          continue;
+
+        offsets.Add(offset);
       }
 
-      //Debug.WriteLine($"🧮 Matched {deltas.Count} points");
-
-      if (deltas.Count < minMatchesRequired)
+      if (offsets.Count < minRequiredMatches)
       {
-        Debug.WriteLine($"❌ Not enough matches ({deltas.Count}), skipping update.");
+        Debug.WriteLine("🚫 Not enough matched angles for ring correction.");
         return Vector2.Zero;
       }
 
-      // Median/MAD filter
-      Vector2 medianOffset = ComputeStableOffsetWithMAD(deltas, maxOffsetPerUpdate);
+      return ComputeStableOffsetWithMAD(offsets, maxMatchingDistance);
+    }
+    public Vector2 EstimateOffsetFromRingTilesRawAngleMatch(
+    List<DataPoint> currentBatch,
+    Dictionary<int, List<Tile>> angleToTilesByRawAngle)
+    {
+      const float maxMatchingDistance = 50f;       // mm
+      const float maxOffsetPerUpdate = 100f;       // mm
+      const int minMatchesRequired = 10;
+      const float smoothingFactor = 0.05f;
+      const float minOffsetThreshold = 3f;
 
-      if (medianOffset.Length() > maxOffsetPerUpdate)
+      List<Vector2> offsets = new();
+
+      foreach (var dp in currentBatch)
       {
-        medianOffset = Vector2.Normalize(medianOffset) * maxOffsetPerUpdate;
-        Debug.WriteLine($"⚠️ Clamped offset to {medianOffset}");
+        if (dp.Distance >= 3500) continue; // Skip inferred ring points
+
+        int rawAngleKey = (int)(dp.Angle * 10f) % 3600;
+        if (rawAngleKey < 0) rawAngleKey += 3600;
+
+        if (!angleToTilesByRawAngle.TryGetValue(rawAngleKey, out var tileList))
+          continue;
+
+        // Get the original hit location
+        Vector2 newMeasuredPos = dp.EqTileGlobalCenter;
+
+        // Try to find a tile whose InferredBy matches this angle
+        Tile bestMatch = null;
+        float bestDist = float.MaxValue;
+
+        foreach (var tile in tileList)
+        {
+          if (tile.InferredBy == null) continue;
+
+          float dist = Vector2.Distance(newMeasuredPos, tile.InferredBy.EqTileGlobalCenter);
+          if (dist < bestDist && dist < maxMatchingDistance)
+          {
+            bestDist = dist;
+            bestMatch = tile;
+          }
+        }
+
+        if (bestMatch == null) continue;
+
+        // Compute expected offset from where this tile was originally inferred
+        Vector2 establishedMeasured = bestMatch.InferredBy.EqTileGlobalCenter;
+        Vector2 delta = establishedMeasured - newMeasuredPos;
+
+        if (delta.Length() > maxMatchingDistance)
+          continue;
+
+        offsets.Add(delta);
       }
 
-      Vector2 smoothedOffset = Vector2.Lerp(_previousOffset, medianOffset, smoothingFactor);
+      if (offsets.Count < minMatchesRequired)
+      {
+        //Debug.WriteLine($"❌ Not enough raw-angle matches ({offsets.Count}), skipping update.");
+        return Vector2.Zero;
+      }
+
+      Vector2 stableOffset = ComputeStableOffsetWithMAD(offsets, maxOffsetPerUpdate);
+
+      if (stableOffset.Length() > maxOffsetPerUpdate)
+      {
+        stableOffset = Vector2.Normalize(stableOffset) * maxOffsetPerUpdate;
+        Debug.WriteLine($"⚠️ Clamped offset to {stableOffset}");
+      }
+
+      Vector2 smoothedOffset = Vector2.Lerp(_previousOffset, stableOffset, smoothingFactor);
+
+      if (smoothedOffset.Length() < minOffsetThreshold)
+      {
+        //Debug.WriteLine($"🛑 Offset below threshold: {smoothedOffset.Length():F2}mm — skipping update.");
+        return Vector2.Zero;
+      }
+
+      _previousOffset = smoothedOffset;
+      return smoothedOffset;
+    }
+
+
+    public Vector2 EstimateOffsetFromRingTiles(
+        List<DataPoint> currentBatch,
+        Dictionary<int, List<Tile>> angleToTilesDict)
+    {
+      const float maxMatchingDistance = 50f;
+      const float maxOffsetPerUpdate = 100f;
+      const int minMatchesRequired = 10;
+      const float smoothingFactor = 0.05f;
+      const float minOffsetThreshold = 2f;
+
+      var deltas = new List<Vector2>();
+
+      foreach (var dp in currentBatch)
+      {
+        if (dp.Distance >= 3500) continue;
+
+        Vector2 origin = dp.OriginalDevicePosition;
+        float angleRad = MathHelper.ToRadians(dp.Angle + dp.Yaw);
+
+        // Calculate inferred ring point at 3500mm along beam
+        Vector2 inferred = origin + new Vector2(
+            MathF.Cos(angleRad) * 3500,
+            MathF.Sin(angleRad) * 3500
+        );
+
+        int adjustedAngleKey = (int)(MathHelper.ToDegrees(angleRad) * 10) % 3600;
+        if (adjustedAngleKey < 0) adjustedAngleKey += 3600;
+
+        if (!angleToTilesDict.TryGetValue(adjustedAngleKey, out var tileList))
+          continue;
+
+        // Find closest matching established ring tile at this angle
+        Tile bestTile = null;
+        float bestDist = float.MaxValue;
+
+        foreach (var tile in tileList)
+        {
+          float dist = Vector2.Distance(inferred, tile.GlobalCenter);
+          if (dist < bestDist && dist <= maxMatchingDistance && tile.InferredBy != null)
+          {
+            bestDist = dist;
+            bestTile = tile;
+          }
+        }
+
+        if (bestTile == null) continue;
+
+        // Previously established positions (global coordinates)
+        Vector2 oldRingGlobal = bestTile.GlobalCenter;
+        Vector2 oldMeasuredGlobal = bestTile.InferredBy.EqTileGlobalCenter;
+
+        // Previous distance between measured and ring tile
+        float oldDistance = Vector2.Distance(oldRingGlobal, oldMeasuredGlobal);
+
+        // New measured position (global), based on current estimate
+        Vector2 newMeasuredGlobal = dp.EqTileGlobalCenter;
+
+        // New inferred position (just calculated above as 'inferred')
+        Vector2 newRingGlobal = inferred;
+
+        // New distance between newly measured and inferred positions
+        float newDistance = Vector2.Distance(newMeasuredGlobal, newRingGlobal);
+
+        // The difference clearly indicates device moved closer or farther
+        float distanceDelta = newDistance - oldDistance;
+
+        // Direction clearly: from measured point to inferred ring point
+        Vector2 direction = Vector2.Normalize(newRingGlobal - newMeasuredGlobal);
+
+        // Offset vector clearly indicates exact required movement
+        Vector2 offset = direction * distanceDelta;
+
+        // CRITICAL: explicitly filter overly large offsets
+        if (offset.Length() > maxMatchingDistance)
+          continue;
+
+        deltas.Add(offset);
+      }
+
+      if (deltas.Count < minMatchesRequired)
+      {
+        //Debug.WriteLine($"❌ Not enough matches ({deltas.Count}), skipping update.");
+        return Vector2.Zero;
+      }
+
+      Vector2 stableOffset = ComputeStableOffsetWithMAD(deltas, maxOffsetPerUpdate);
+
+      if (stableOffset.Length() > maxOffsetPerUpdate)
+      {
+        stableOffset = Vector2.Normalize(stableOffset) * maxOffsetPerUpdate;
+        Debug.WriteLine($"⚠️ Clamped offset to {stableOffset}");
+      }
+
+      Vector2 smoothedOffset = Vector2.Lerp(_previousOffset, stableOffset, smoothingFactor);
 
       if (smoothedOffset.Length() < minOffsetThreshold)
       {
@@ -397,9 +562,11 @@ namespace RPLIDAR_Mapping.Features.Map
       }
 
       _previousOffset = smoothedOffset;
-      Debug.WriteLine($"📐 Smoothed offset = {smoothedOffset}");
+      //Debug.WriteLine($"📐 Smoothed offset = {smoothedOffset}");
       return smoothedOffset;
     }
+
+
 
 
     private Vector2 ComputeStableOffsetWithMAD(List<Vector2> deltas, float maxOffsetPerUpdate)
@@ -455,12 +622,6 @@ namespace RPLIDAR_Mapping.Features.Map
     }
 
 
-
-
-
-
-
-
     public HashSet<Tile> GetPermanentTiles()
     {
       HashSet<Tile> allPermanentTiles = new();
@@ -471,35 +632,7 @@ namespace RPLIDAR_Mapping.Features.Map
       }
       return allPermanentTiles;
     }
-    Dictionary<int, List<(Tile realTile, Tile inferredTile)>> EstimateCurrentRingVectorsFromMapPoints(List<MapPoint> points)
-    {
-      var result = new Dictionary<int, List<(Tile, Tile)>>();
-
-      foreach (var p in points)
-      {
-        if (!p.IsInferredRingPoint || p.InferredBy == null) continue;
-
-        int angleKey = (int)(p.Angle * 10); // Use first decimal (0–3599)
-
-        // Get tiles from global position
-        Tile inferredTile = _gridManager.GetTileAtGlobalCoordinates(p.GlobalX, p.GlobalY);
-        Tile realTile = _gridManager.GetTileAtGlobalCoordinates(p.InferredBy.GlobalX, p.InferredBy.GlobalY);
-
-        if (inferredTile != null && realTile != null)
-        {
-          if (!result.TryGetValue(angleKey, out var pairList))
-          {
-            pairList = new List<(Tile, Tile)>();
-            result[angleKey] = pairList;
-          }
-
-          pairList.Add((realTile, inferredTile));
-        }
-      }
-
-      return result;
-    }
-
+ 
     public void resetAllGrids()
     {
       _gridManager.Grids.Clear();
@@ -537,7 +670,8 @@ namespace RPLIDAR_Mapping.Features.Map
           float adjustedAngle = rawRadians + yawRadians;
 
           // Apply current (updated) device position to this point
-          Vector2 devicePosAtHit = _device._devicePosition;
+          //Vector2 devicePosAtHit = _device._devicePosition;
+          Vector2 devicePosAtHit = dp.DevicePositionAtHit;
 
           float relativeX = dp.Distance * MathF.Cos(adjustedAngle);
           float relativeY = dp.Distance * MathF.Sin(adjustedAngle);
@@ -562,36 +696,98 @@ namespace RPLIDAR_Mapping.Features.Map
 
           addedPoints.Add(mapPoint);
           // Add an inferred ringpoint behind every normal point
-          if (!isRingPoint)
-          {
-            float inferredRingX = 3500 * MathF.Cos(adjustedAngle);
-            float inferredRingY = 3500 * MathF.Sin(adjustedAngle);
-            float inferredGlobalX = devicePosAtHit.X + inferredRingX;
-            float inferredGlobalY = devicePosAtHit.Y + inferredRingY;
+          //if (!isRingPoint)
+          //{
+          //  float inferredRingX = 3500 * MathF.Cos(adjustedAngle);
+          //  float inferredRingY = 3500 * MathF.Sin(adjustedAngle);
+          //  float inferredGlobalX = devicePosAtHit.X + inferredRingX;
+          //  float inferredGlobalY = devicePosAtHit.Y + inferredRingY;
 
-            MapPoint inferredRingPoint = new MapPoint(
-                inferredRingX, inferredRingY,
-                dp.Angle, 3500,
-                adjustedAngle, rawRadians,
-                dp.Quality,
-                inferredGlobalX, inferredGlobalY,
-                devicePosAtHit,
-                yawRadians,
-                true
-            );
-            int tileSize = 10;
-            Vector2 tilePos = new(MathF.Floor(inferredGlobalX / tileSize) * tileSize, MathF.Floor(inferredGlobalX / tileSize) * tileSize);
-            Vector2 tileCenter = tilePos + new Vector2(tileSize / 2f, tileSize / 2f);
-            inferredRingPoint.IsInferredRingPoint = true;
-            inferredRingPoint.InferredBy = mapPoint;
-            inferredRingPoint.EqTileGlobalCenter = tileCenter;
-            addedPoints.Add(inferredRingPoint);
-          }
+          //  MapPoint inferredRingPoint = new MapPoint(
+          //      inferredRingX, inferredRingY,
+          //      dp.Angle, 3500,
+          //      adjustedAngle, rawRadians,
+          //      dp.Quality,
+          //      inferredGlobalX, inferredGlobalY,
+          //      devicePosAtHit,
+          //      yawRadians,
+          //      true
+          //  );
+          //  int tileSize = 10;
+          //  Vector2 tilePos = new(MathF.Floor(inferredGlobalX / tileSize) * tileSize, MathF.Floor(inferredGlobalX / tileSize) * tileSize);
+          //  Vector2 tileCenter = tilePos + new Vector2(tileSize / 2f, tileSize / 2f);
+          //  inferredRingPoint.IsInferredRingPoint = true;
+          //  inferredRingPoint.InferredBy = mapPoint;
+          //  inferredRingPoint.EqTileGlobalCenter = tileCenter;
+          //  addedPoints.Add(inferredRingPoint);
+
+          //}
         }
       }
       AddedPoints = addedPoints;
     }
+    public List<MapPoint> SimulateAddingPoints(List<DataPoint> dplist, Vector2 devicePos)
+    {
+      List<MapPoint> simulatedPoints = new();
+      foreach (DataPoint dp in dplist)
+      {
+        if (dp.Distance >= 3500) continue;
 
+        float yawRadians = MathHelper.ToRadians(dp.Yaw);
+        float adjustedAngle = MathHelper.ToRadians(dp.Angle) + yawRadians;
+
+        float inferredX = devicePos.X + 3500 * MathF.Cos(adjustedAngle);
+        float inferredY = devicePos.Y + 3500 * MathF.Sin(adjustedAngle);
+        Vector2 inferredGlobal = new(inferredX, inferredY);
+
+        MapPoint inferredRingPoint = new MapPoint(
+            3500 * MathF.Cos(adjustedAngle),
+            3500 * MathF.Sin(adjustedAngle),
+            dp.Angle, 3500,
+            adjustedAngle, MathHelper.ToRadians(dp.Angle),
+            dp.Quality,
+            inferredGlobal.X, inferredGlobal.Y,
+            devicePos,
+            yawRadians,
+            true
+        );
+        inferredRingPoint.IsInferredRingPoint = true;
+
+        simulatedPoints.Add(inferredRingPoint);
+      }
+      return simulatedPoints;
+    }
+    public Vector2 CalculateCorrectiveOffset(List<MapPoint> simulatedRingPoints, Dictionary<int, List<Tile>> establishedRingDict)
+    {
+      const float maxMatchDistance = 50f;
+      List<Vector2> correctiveOffsets = new();
+
+      foreach (var inferredPoint in simulatedRingPoints)
+      {
+        int angleKey = (int)(MathHelper.ToDegrees(inferredPoint.Radians) * 10) % 3600;
+        if (angleKey < 0) angleKey += 3600;
+
+        if (!establishedRingDict.TryGetValue(angleKey, out var establishedTiles))
+          continue;
+
+        Tile closestTile = establishedTiles
+            .OrderBy(t => Vector2.Distance(inferredPoint.EqTileGlobalCenter, t.GlobalCenter))
+            .FirstOrDefault();
+
+        if (closestTile == null) continue;
+
+        Vector2 offset = closestTile.GlobalCenter - inferredPoint.EqTileGlobalCenter;
+
+        if (offset.Length() > maxMatchDistance) continue;
+
+        correctiveOffsets.Add(offset);
+      }
+
+      if (correctiveOffsets.Count == 0)
+        return Vector2.Zero;
+
+      return ComputeStableOffsetWithMAD(correctiveOffsets, maxMatchDistance);
+    }
 
 
 

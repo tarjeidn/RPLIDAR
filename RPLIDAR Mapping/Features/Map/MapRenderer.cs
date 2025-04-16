@@ -108,8 +108,8 @@ namespace RPLIDAR_Mapping.Features.Map
 
         // 🟢 Compute world position of the grid (relative to device)
         Vector2 gridWorldPosition = new Vector2(
-            (pos.Item1 * scaledGridSize) + devicePosition.X,
-            (pos.Item2 * scaledGridSize) + devicePosition.Y
+            (pos.Item1 * scaledGridSize),
+            (pos.Item2 * scaledGridSize)
         );
         grid.GridPosition = gridWorldPosition;
         Rectangle gridBounds = new Rectangle(
@@ -176,7 +176,7 @@ namespace RPLIDAR_Mapping.Features.Map
             _gridDrawQueue.Enqueue(gridKey);
           }
         }
-        DrawTilesCanvas();
+        DrawTilesCanvas(deviceScreenPos);
       }
       _SpriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp, null, null);
 
@@ -186,7 +186,7 @@ namespace RPLIDAR_Mapping.Features.Map
       _SpriteBatch.Draw(targetToDraw, Vector2.Zero, Color.White);
       DrawOverlays(deviceScreenPos); // 🔥 Overlays always update
       if (_TileMerge.DrawMergedLines && _TileMerge.ComputeMergedLines) DrawMergedLines(sourceBounds);
-      DrawDevice(deviceScreenPos);
+
       DrawSelection(sourceBounds);
       if (_map.PermanentLines.Count > 0) DrawPermanentLines(sourceBounds);
       if (_TileMerge.DrawMergedTiles) DrawClusterBoundingRectangles();
@@ -242,17 +242,17 @@ namespace RPLIDAR_Mapping.Features.Map
           Color.White
       );
     }
-    private void DrawTilesCanvas()
+    private void DrawTilesCanvas(Vector2 deviceScreenPos)
     {
       // Swap to inactive target for rendering
-      _Camera.CenterOn(_device._devicePosition);
+      //_Camera.CenterOn(_device._devicePosition);
       RenderTarget2D targetToDraw = _activeRenderTargetA ? TilesRenderTarget_B : TilesRenderTarget_A;
 
       _GraphicsDevice.SetRenderTarget(targetToDraw);
       _GraphicsDevice.Clear(Color.Black);
 
       _SpriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp, null, null);
-
+      DrawDevice(deviceScreenPos);
       DrawGrids(_device._devicePosition, 200); // Draw tiles in batches
 
       _SpriteBatch.End();

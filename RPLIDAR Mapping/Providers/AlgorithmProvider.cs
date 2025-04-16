@@ -11,7 +11,7 @@ namespace RPLIDAR_Mapping.Providers
 {
   public static class AlgorithmProvider
   {
-    public static DevicePositionEstimator DevicePositionEstimator { get; set; }
+
     public static TileTrustRegulator TileTrustRegulator { get; private set; }
     public static TileMerge TileMerge { get; private set; }
     public static ICP ICP { get; private set; }
@@ -19,7 +19,7 @@ namespace RPLIDAR_Mapping.Providers
     {
       TileTrustRegulator = new TileTrustRegulator();
       TileMerge = new TileMerge();
-      DevicePositionEstimator = new DevicePositionEstimator();
+
       ICP = new ICP();
     }
   }

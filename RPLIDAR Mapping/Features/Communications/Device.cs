@@ -149,7 +149,7 @@ namespace RPLIDAR_Mapping.Features.Communications
       {
         Log($"Attempting to open Serial Port: {portName}...");
 
-        _serialPort = new SerialPort(portName, 115200);
+        _serialPort = new SerialPort(portName, 500000);
         _serialPort.Open();
 
         Log(" Serial port opened successfully!");
@@ -199,7 +199,7 @@ namespace RPLIDAR_Mapping.Features.Communications
     }
     private void HandleIncomingSerialMessage(string message)
     {
-      _GuiManager.AddLogMessage($"[Serial] {message}");
+      _GuiManager.AddLogMessage($"{message}");
 
     }
     public void UpdateLidarSettings(LidarSettings newSettings)
@@ -213,7 +213,7 @@ namespace RPLIDAR_Mapping.Features.Communications
     private void Log(string message)
     {
       Debug.WriteLine("Log");
-      _GuiManager?.AddLogMessage($"[Device] {message}");
+      _GuiManager?.AddLogMessage($"{message}");
     }
     public List<DataPoint> GetData() => _communication.DequeueAllData();
 

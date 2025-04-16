@@ -280,46 +280,17 @@ namespace RPLIDAR_Mapping.Features.Communications
         for (int i = 0; i < buffer.Length; i++)
         {
           byte b = buffer[i];
-
-          if (!_isReceivingPacket)
-          {
-            // LiDAR packet start marker: 0xFF 0xAA
-            if (_serialBuffer.Count == 0 && b == 0xFF)
-            {
-              _serialBuffer.Add(b);
-            } else if (_serialBuffer.Count == 1 && _serialBuffer[0] == 0xFF && b == 0xAA)
-            {
-              _serialBuffer.Add(b);
-              _isReceivingPacket = true;
-              _packetType = "lidar";
-            }
-              // Text mode (ASCII printable + newline)
-              else if (b == '\n')
-            {
-              string msg = _textLineBuffer.ToString().Trim();
-              if (!string.IsNullOrEmpty(msg))
-                OnMessageReceived?.Invoke($"Serial: {msg}");
-              _textLineBuffer.Clear();
-            } else if (b >= 32 && b < 127)
-            {
-              _textLineBuffer.Append((char)b);
-            } else
-            {
-              _textLineBuffer.Clear(); // Ignore garbage
-            }
-          } else
+          // 🔁 Packet handling
+          if (_isReceivingPacket)
           {
             _serialBuffer.Add(b);
 
-            // ✅ Check end markers for LiDAR
             if (_packetType == "lidar" &&
                 _serialBuffer.Count > 4 &&
                 _serialBuffer[^2] == 0xEE &&
                 _serialBuffer[^1] == 0xBB)
             {
               int payloadSize = _serialBuffer.Count - 4;
-
-              // 🚀 Avoid .Skip() by copying directly
               byte[] lidarPayload = new byte[payloadSize];
               _serialBuffer.CopyTo(2, lidarPayload, 0, payloadSize);
 
@@ -336,9 +307,45 @@ namespace RPLIDAR_Mapping.Features.Communications
               _packetType = null;
             }
 
-            // Future: Add other packet types here
+            continue; // ✅ Don't mix with string parsing
+          }
+
+          // 🔍 Detect new packet
+          if (_serialBuffer.Count == 0 && b == 0xFF)
+          {
+            _serialBuffer.Add(b);
+            continue;
+          } else if (_serialBuffer.Count == 1 && _serialBuffer[0] == 0xFF && b == 0xAA)
+          {
+            _serialBuffer.Add(b);
+            _isReceivingPacket = true;
+            _packetType = "lidar";
+            continue;
+          } else
+          {
+            _serialBuffer.Clear(); // Not a valid packet, treat as text
+          }
+
+          // 📝 Text mode (ASCII printable or newline)
+          if (b == '\n')
+          {
+
+            string msg = _textLineBuffer.ToString().Trim();
+            if (!string.IsNullOrEmpty(msg))
+            {
+              OnMessageReceived?.Invoke($"Serial: {msg}");
+            }
+
+            _textLineBuffer.Clear();
+          } else if (b >= 32 && b < 127)
+          {
+            _textLineBuffer.Append((char)b);
+          } else
+          {
+            _textLineBuffer.Clear(); // Non-printable, clear it
           }
         }
+
       } catch (Exception ex)
       {
         OnMessageReceived?.Invoke($"Serial Error: {ex.Message}");
