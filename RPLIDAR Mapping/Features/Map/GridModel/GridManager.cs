@@ -170,7 +170,7 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
       }
 
       Grid grid = GetOrCreateGrid(gridX, gridY, createIfMissing: false);
-      return grid.GetTileAt(localX, localY);
+      return grid?.TryGetTileAt(localX, localY);
     }
 
 

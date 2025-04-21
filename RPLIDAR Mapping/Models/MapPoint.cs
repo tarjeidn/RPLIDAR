@@ -24,6 +24,7 @@ namespace RPLIDAR_Mapping.Models
     public readonly Vector2 RelativePosition;
     public readonly Vector2 DevicePosition;
     public Vector2 EqTileGlobalCenter;
+    public Vector2 EqTilePosition;
     public byte Quality;
     public bool IsRingPoint;
     public bool IsInferredRingPoint = false;

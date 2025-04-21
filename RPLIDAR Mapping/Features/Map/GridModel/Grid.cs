@@ -141,7 +141,7 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
     }
 
 
-    public void AddPoint(int X, int Y, MapPoint point)
+    public Tile AddPoint(int X, int Y, MapPoint point)
     {
       Tile tile = GetTileAt(X, Y);
       tile.IsRingTile = point.IsRingPoint;
@@ -156,11 +156,11 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
       tile.Position = new Vector2(X * tileSize, Y * tileSize);
       //tile.Position = new Vector2(tile.GlobalCenter.X * tileSize,
       //                            tile.GlobalCenter.Y * tileSize);
-
+      int angleKey = 0;
       if (point.IsRingPoint)
       {
         IsUpdated = true;
-        tile.TrustedScore = 100;
+        //tile.TrustedScore = 100;
 
         if (point.IsInferredRingPoint)
         {
@@ -172,9 +172,7 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
           float angleDeg = MathHelper.ToDegrees(point.Radians) % 360f;
 
           if (angleDeg < 0) angleDeg += 360f;
-          int angleKey = (int)(angleDeg * 10); // 0–3599
-
-
+          angleKey = (int)(angleDeg * 10); // 0–3599
 
           var dict = UtilityProvider.Map.EstablishedRingTilesByAngle;
           if (!dict.TryGetValue(angleKey, out var tileList))
@@ -192,8 +190,17 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
         }
 
         RingTiles.Add(tile);
-        return;
+        return null;
       }
+      // Add to angular tile map for neighbor linking
+      float adjustedAngleDeg = MathHelper.ToDegrees(point.Radians) % 360f;
+      if (adjustedAngleDeg < 0) adjustedAngleDeg += 360f;
+      angleKey = (int)(adjustedAngleDeg * 10);
+
+
+      // Add or update tile in the map
+      //UtilityProvider.Map.AngularTileMap[angleKey] = tile;
+
       tile.TrustedScore = Math.Min(100, tile.TrustedScore + TTR.TrustIncrement);
 
       if (_drawnTiles.TryAdd((X, Y), tile)) GridManager._map.NewTiles.Add(tile); 
@@ -208,6 +215,7 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
 
 
       IsUpdated = true;
+      return tile;
     }
 
 
@@ -239,6 +247,22 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
 
       return tile;
     }
+    public Tile TryGetTileAt(int x, int y)
+{
+    if (_tileMap == null)
+        return null;
+
+    if (_tileMap.TryGetValue(x, out var column))
+    {
+        if (column.TryGetValue(y, out var tile))
+        {
+            return tile;
+        }
+    }
+
+    return null;
+}
+
 
     //public Dictionary<(int, int), Tile> GetTrustedTiles()
     //{

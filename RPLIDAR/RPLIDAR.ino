@@ -156,6 +156,8 @@ void scanPointCallback(float angle_deg, float dist_mm, float quality, bool scan_
     lidarPoints[batchIndex].distance = (uint16_t)dist_mm;
   else
     lidarPoints[batchIndex].distance = 3500;
+  //lidarPoints[batchIndex].distance = (uint16_t)dist_mm;
+
 
   lidarPoints[batchIndex].yaw = (uint16_t)(currentYaw * 100);
 
@@ -549,14 +551,14 @@ void setup() {
     if (useSerial) SendStatusMessage("BNO055 not detected. Check wiring!");
     while (1);
   }
-  delay(1000);
+  delay(100);
   bno.setExtCrystalUse(true);
   if (useSerial) SendStatusMessage("BNO055 initialized.");
 
   // Capture initial yaw offset
   sensors_event_t orientationData;
   bno.getEvent(&orientationData);
-  _yawOffset = orientationData.orientation.x;
+  _yawOffset = 0;
   if (useSerial) {
     SendStatusMessage("Yaw offset set to: ");
     SendStatusMessage(_yawOffset);

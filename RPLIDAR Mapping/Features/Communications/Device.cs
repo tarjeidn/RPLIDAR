@@ -29,7 +29,8 @@ namespace RPLIDAR_Mapping.Features.Communications
     public float _deviceOrientation { get; set; }
     private const int DeviceWidth = 20; 
     private const int DeviceHeight = 20;
-
+    public Queue<(Vector2 position, float timestamp)> _positionHistory= new ();
+    public int MaxHistoryLength = 10;
     public Device(ConnectionParams connectionParameters, GuiManager gm)
     {
       string communicationType = connectionParameters.ConnectionType;

@@ -15,6 +15,7 @@ namespace RPLIDAR_Mapping.Providers
     public static TileTrustRegulator TileTrustRegulator { get; private set; }
     public static TileMerge TileMerge { get; private set; }
     public static ICP ICP { get; private set; }
+    public static VirtualTileScanMatcher ScanMatcher = new VirtualTileScanMatcher(); 
     public static void Initialize()
     {
       TileTrustRegulator = new TileTrustRegulator();

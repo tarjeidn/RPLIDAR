@@ -208,9 +208,23 @@ namespace RPLIDAR_Mapping.Utilities
           }
         }
 
-        if (neighborCount >= 0)
+        if (neighborCount >= 1)
           queue.Enqueue(point);
       }
+    }
+    public static Tile CreateSimulatedTile(Vector2 globalCenter, MapPoint point)
+    {
+      var dummyGrid = DummyGridFactory.GetDummyGrid();
+
+      var tile = new Tile(0, 0, dummyGrid)
+      {
+        GlobalCenter = globalCenter,
+        WorldGlobalPosition = globalCenter - new Vector2(5f, 5f), // 10mm tile
+        WorldRect = new Rectangle((int)(globalCenter.X - 5), (int)(globalCenter.Y - 5), 10, 10),
+        _lastLIDARpoint = point
+      };
+
+      return tile;
     }
 
 
@@ -230,6 +244,29 @@ namespace RPLIDAR_Mapping.Utilities
 
 
 
+  }
+  public static class DummyGridFactory
+  {
+    private static Grid _dummyGrid;
+
+    public static Grid GetDummyGrid()
+    {
+      if (_dummyGrid != null) return _dummyGrid;
+
+      var gm = DummyGridManager.Instance;
+      _dummyGrid = new Grid(gm, 0, 0);
+      return _dummyGrid;
+    }
+  }
+  public class DummyGridManager : GridManager
+  {
+    private static DummyGridManager _instance;
+    public static DummyGridManager Instance => _instance ??= new DummyGridManager();
+
+    private DummyGridManager() : base(null)
+    {
+      GridStats = null;
+    }
   }
 
   public class FPSCounter

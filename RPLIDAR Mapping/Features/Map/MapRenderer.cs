@@ -156,7 +156,27 @@ namespace RPLIDAR_Mapping.Features.Map
       DrawMatchedPairs();
 
     }
+    public void DrawAngularLinks()
+    {
+      foreach (var tile in UtilityProvider.Map._gridManager.GetAllTrustedTiles().ToList())
+      {
+        if (tile.RightAngularNeighbor != null)
+        {
+          Tile right = tile.RightAngularNeighbor;
+          Vector2 screenStart = _Camera.WorldToScreen(tile.WorldGlobalPosition);
+          Vector2 screenEnd = _Camera.WorldToScreen(right.WorldGlobalPosition);
+          DrawingHelperFunctions.DrawLine(_SpriteBatch, screenStart, screenEnd, Color.Green, 2);
+        }
+        if (tile.BottomAngularNeighbor != null)
+        {
+          Tile bottom = tile.BottomAngularNeighbor;
+          Vector2 screenStart = _Camera.WorldToScreen(tile.WorldGlobalPosition);
+          Vector2 screenEnd = _Camera.WorldToScreen(bottom.WorldGlobalPosition);
+          DrawingHelperFunctions.DrawLine(_SpriteBatch, screenStart, screenEnd, Color.Green, 2);
+        }
+      }
 
+    }
 
     public void DrawMap(bool isMapUpdated)
     {
@@ -236,11 +256,17 @@ namespace RPLIDAR_Mapping.Features.Map
       // Draw line indicating direction
       DrawingHelperFunctions.DrawLine(_SpriteBatch, deviceScreenPos, endPoint, Color.Green, 3);
       _SpriteBatch.DrawString(
-          ContentManagerProvider.GetFont("DebugFont"),
-          $"T: {MathHelper.ToDegrees(_device._deviceOrientation):0.00} POS: {_device._devicePosition}",
-          deviceScreenPos + new Vector2(10, -20),
-          Color.White
-      );
+        ContentManagerProvider.GetFont("DebugFont"),
+        $"T: {MathHelper.ToDegrees(_device._deviceOrientation):0.00} POS: {_device._devicePosition}",
+        deviceScreenPos + new Vector2(10, -20),
+        Color.White
+    );
+      //_SpriteBatch.DrawString(
+      //    ContentManagerProvider.GetFont("DebugFont"),
+      //    $"T: {MathHelper.ToDegrees(_device._deviceOrientation):0.00} POS: {(int)_device._devicePosition.X}, {(int)_device._devicePosition.Y}",
+      //    deviceScreenPos + new Vector2(10, -20),
+      //    Color.White
+      //);
     }
     private void DrawTilesCanvas(Vector2 deviceScreenPos)
     {
@@ -254,7 +280,7 @@ namespace RPLIDAR_Mapping.Features.Map
       _SpriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp, null, null);
       DrawDevice(deviceScreenPos);
       DrawGrids(_device._devicePosition, 200); // Draw tiles in batches
-
+      DrawAngularLinks();
       _SpriteBatch.End();
       _GraphicsDevice.SetRenderTarget(null);
     }

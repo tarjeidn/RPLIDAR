@@ -18,10 +18,6 @@ using RPLIDAR_Mapping.Models;
 using RPLIDAR_Mapping.Providers;
 using RPLIDAR_Mapping.Utilities;
 
-
-
-
-
 namespace RPLIDAR_Mapping.Features.Map
 {
   public class Map
@@ -49,10 +45,14 @@ namespace RPLIDAR_Mapping.Features.Map
     public Dictionary<int, List<(MapPoint, MapPoint)>> CurrentRingPairs = new();
     public Dictionary<int, List<Tile>> EstablishedRingTilesByAngle { get; private set; } = new();
     public Dictionary<int, List<Tile>> _establishedOriginalPointsByRawAngle = new();
+    public Dictionary<int, Tile> AngularTileMap = new();
+    public Dictionary<int, Tile> _tempAngularTileMap = new();
+    public Queue<Vector2> _previousOffsets = new();
     private Vector2 _previousOffset = Vector2.Zero;
     public Dictionary<int, (Vector2 inferred, Vector2 origin)> PreviousRingVectors = new();
     private List<MapPoint> AddedPoints = new();
     private readonly Dictionary<int, float> _previousInferredDistances = new();
+    private Vector2 _lastCoarseOffset = Vector2.Zero;
 
 
     public bool _pointsAdded { get; private set; }
@@ -75,9 +75,10 @@ namespace RPLIDAR_Mapping.Features.Map
     {
       Idle,
       AddingNewPoints,
+      CreateVirtualReference,
       EstimateDevicePosition,
       SimulateDevicePosition,
-      UpdateDevicePosition,
+
       DistributePoints,
       UpdatingTiles,
       RunningTrustRegulator,
@@ -165,62 +166,33 @@ namespace RPLIDAR_Mapping.Features.Map
             MatchedTileCount = 0;
             MismatchedTileCount = 0;
             _fpsCounter.IncrementLiDARUpdate();
-            _currentState = MapUpdateState.EstimateDevicePosition;
+            //_currentState = MapUpdateState.AddingNewPoints;
+            _currentState = MapUpdateState.SimulateDevicePosition;
           }
           break;
 
 
+
+        case MapUpdateState.SimulateDevicePosition:
+
+          // Simulate adding points at estimated position
+          Vector2 simOffset = EstimateOffsetAdaptive(_pointsBuffer, _device._devicePosition);
+          _device._devicePosition += simOffset;
+
+          _currentState = MapUpdateState.EstimateDevicePosition;
+          break;
 
         case MapUpdateState.EstimateDevicePosition:
           {
-            var allRingTiles = _gridManager.GetAllRingTiles();
-            if (allRingTiles.Count == 0)
-            {
-              Debug.WriteLine("🕒 Skipping offset estimation — no established ring tiles yet.");
-              _currentState = MapUpdateState.UpdateDevicePosition;
-              break;
-            }
-
-            //var newInferredPoints = AddedPoints.Where(p => p.IsInferredRingPoint).ToList();
-            //Vector2 offset = EstimateOffsetFromRingTiles(_pointsBuffer, EstablishedRingTilesByAngle);
-            // Initial estimation
-            //Vector2 initialOffset = EstimateOffsetFromRingTiles(_pointsBuffer, EstablishedRingTilesByAngle);
-            //ApplyIndividualRingOffsets(_pointsBuffer, EstablishedRingTilesByAngle);
-            //Vector2 initialOffset = EstimateOffsetFromRingTilesRawAngleMatch(_pointsBuffer, _establishedOriginalPointsByRawAngle);
             Vector2 offset = MotionEstimator.EstimateDeviceOffsetFromAngleHistory(_pointsBuffer);
             _device._devicePosition += offset;
-            //if (initialOffset != Vector2.Zero)
-            //{
-            //  _device._devicePosition += initialOffset;
-            //  _currentState = MapUpdateState.UpdateDevicePosition;
-            //  _gridManager.ResetAllRingTiles();
-            //  break;
-            //}
-
-
             _currentState = MapUpdateState.AddingNewPoints;
             break;
           }
-        case MapUpdateState.UpdateDevicePosition:
-         // // Simulate adding points at estimated position
-         // List<MapPoint> simulatedRingPoints = SimulateAddingPoints(_pointsBuffer, _device._devicePosition);
 
-         // //Step 3: calculate corrective offset to center ring back to origin
-         //Vector2 correctiveOffset = CalculateAngleLockedRingCorrection(_pointsBuffer, EstablishedRingTilesByAngle, _device._devicePosition);
-
-         // //Apply corrective offset 
-
-         // if (correctiveOffset != Vector2.Zero)
-         // {
-         //   _device._devicePosition += correctiveOffset;
-         //   //UtilityProvider.Camera.CenterOn(_device._devicePosition);
-         //   _gridManager.ResetAllRingTiles(); // Clear outdated ones after motion
-         // }
-          _currentState = MapUpdateState.AddingNewPoints;
-          break;
 
         case MapUpdateState.AddingNewPoints:
-          NewTiles.Clear();
+
           AddPoints(_pointsBuffer);
           _tileMerge.CurrentState = TileMerge.MergeState.NewPointsAdded;
           _pointsBuffer.Clear();
@@ -232,7 +204,10 @@ namespace RPLIDAR_Mapping.Features.Map
         case MapUpdateState.DistributePoints:
           {
             _Distributor.Distribute(AddedPoints);
+            //LinkAngularNeighbors();
+            LinkNearestNeighborsByProximity(NewTiles.ToList());
             _currentState = MapUpdateState.UpdatingTiles;
+            NewTiles.Clear(); 
           }
           break;
 
@@ -269,357 +244,364 @@ namespace RPLIDAR_Mapping.Features.Map
       }
       return IsUpdated;
     }
-    public void ApplyIndividualRingOffsets(
-    List<DataPoint> currentBatch,
-    Dictionary<int, List<Tile>> angleToTilesDict)
+
+
+
+    public Vector2 EstimateOffsetAdaptive(List<DataPoint> dplist, Vector2 guessedDevicePosition)
     {
-      const float maxMatchingDistance = 50f;
-
-      foreach (var dp in currentBatch)
+      float tileSize = 10f;
+      int initialSearchRadius = 4;     // or 5
+      int extendedSearchRadius = 7;    // or 8
+      float maxOffsetLength = 20f;
+      float allowedNeighborError = 0.3f; // tighter
+      float minMatchRatio = 0.3f;        // higher confidence
+      float minOffsetMagnitude = 0.1f;
+      float maxAcceptableError = 0.7f;   // more picky
+      var originalNeighbors = new Dictionary<Tile, (Tile Left, Tile Right, Tile Top, Tile Bottom)>();
+      foreach (var tile in UtilityProvider.Map._gridManager.GetAllTrustedTiles())
       {
-        if (dp.Distance >= 3500) continue;
+        originalNeighbors[tile] = (
+            tile.LeftAngularNeighbor,
+            tile.RightAngularNeighbor,
+            tile.TopAngularNeighbor,
+            tile.BottomAngularNeighbor
+        );
+      }
+      // Step 1: Run initial sweep
+      var (offset, matchCount, neighborError) = RunOffsetSweep(
+          dplist, guessedDevicePosition, initialSearchRadius,
+          tileSize, maxOffsetLength, allowedNeighborError, minMatchRatio, originalNeighbors
+      );
 
-        Vector2 origin = dp.OriginalDevicePosition;
-        float angleRad = MathHelper.ToRadians(dp.Angle + dp.Yaw);
+      //Debug.WriteLine($"🔍 Initial offset = {offset}, matchCount = {matchCount}, error = {neighborError:F2}");
 
-        Vector2 inferred = origin + new Vector2(
-            MathF.Cos(angleRad) * 3500,
-            MathF.Sin(angleRad) * 3500
+      if (matchCount == 0 || offset.Length() < minOffsetMagnitude || neighborError > maxAcceptableError)
+      {
+        //Debug.WriteLine($"⚠️ Initial sweep too noisy. Triggering fallback sweep.");
+
+        // Step 2: Fallback extended sweep
+        var (fallbackOffset, fallbackCount, fallbackError) = RunOffsetSweep(
+            dplist, guessedDevicePosition, extendedSearchRadius,
+            tileSize, maxOffsetLength, allowedNeighborError, minMatchRatio * 0.8f, // slightly relaxed
+            originalNeighbors
         );
 
-        int angleKey = (int)(MathHelper.ToDegrees(angleRad) * 10) % 3600;
-        if (angleKey < 0) angleKey += 3600;
-
-        if (!angleToTilesDict.TryGetValue(angleKey, out var tileList))
-          continue;
-
-        Tile bestTile = null;
-        float bestDist = float.MaxValue;
-
-        foreach (var tile in tileList)
+        if (fallbackCount > 0 && fallbackOffset.Length() >= minOffsetMagnitude && fallbackError <= maxAcceptableError * 2)
         {
-          if (tile.InferredBy == null) continue;
+          //Debug.WriteLine($"✅ Fallback successful: offset = {fallbackOffset}, error = {fallbackError:F2}");
+          return fallbackOffset;
+        }
 
-          float dist = Vector2.Distance(inferred, tile.GlobalCenter);
-          if (dist < bestDist && dist <= maxMatchingDistance)
+        //Debug.WriteLine("🛑 Fallback failed — returning zero offset.");
+        return Vector2.Zero;
+      }
+      //Debug.WriteLine($"✅ Final offset applied: {offset}");
+      return offset;
+    }
+    private (Vector2 offset, int matchCount, float avgNeighborError) RunOffsetSweep(
+      List<DataPoint> dplist,
+      Vector2 guessedDevicePosition,
+      int searchRadius,
+      float tileSize,
+      float maxOffsetLength,
+      float allowedNeighborError,
+      float minMatchRatio,
+      Dictionary<Tile, (Tile Left, Tile Right, Tile Top, Tile Bottom)> originalLinks)
+    {
+      float stepSize = tileSize / 2f; // 5mm if tileSize = 10
+      List<Vector2> candidateOffsets = new();
+      float range = searchRadius * tileSize;
+
+      for (float dx = -range; dx <= range; dx += stepSize)
+      {
+        for (float dy = -range; dy <= range; dy += stepSize)
+        {
+          candidateOffsets.Add(new Vector2(dx, dy));
+        }
+      }
+
+      Vector2 bestOffset = Vector2.Zero;
+      int bestMatchCount = 0;
+      List<Vector2> bestMatchedDeltas = new();
+      float bestAvgNeighborError = float.MaxValue;
+      float bestAvgAlignmentScore = float.MaxValue;
+
+      foreach (Vector2 candidate in candidateOffsets)
+      {
+        int matchCount = 0;
+        List<Vector2> deltas = new();
+        float totalNeighborError = 0f;
+        int neighborComparisons = 0;
+        float alignmentScoreSum = 0f;
+        int alignmentSamples = 0;
+
+        foreach (DataPoint dp in dplist)
+        {
+          if (dp.Distance >= 3500) continue;
+
+          float yawRadians = MathHelper.ToRadians(dp.Yaw);
+          float adjustedAngle = MathHelper.ToRadians(dp.Angle) + yawRadians;
+
+          float hitX = guessedDevicePosition.X + dp.Distance * MathF.Cos(adjustedAngle);
+          float hitY = guessedDevicePosition.Y + dp.Distance * MathF.Sin(adjustedAngle);
+          Vector2 inferredGlobal = new(hitX, hitY);
+          Vector2 shiftedGlobal = inferredGlobal + candidate;
+
+          Tile tile = UtilityProvider.Map._gridManager.GetTileAtGlobalCoordinates(shiftedGlobal.X, shiftedGlobal.Y);
+          if (tile != null && tile._lastLIDARpoint != null)
           {
-            bestDist = dist;
-            bestTile = tile;
+            var oldPoint = tile._lastLIDARpoint;
+
+            Vector2 newDir = new(MathF.Cos(adjustedAngle), MathF.Sin(adjustedAngle));
+            Vector2 estimatedNewDevicePos = oldPoint.EqTileGlobalCenter - dp.Distance * newDir;
+            Vector2 delta = estimatedNewDevicePos - guessedDevicePosition;
+
+            if (delta.Length() < maxOffsetLength)
+            {
+              float alignment = ComputeAlignmentScore(candidate, tile);
+              alignmentScoreSum += alignment;
+              alignmentSamples++;
+
+              deltas.Add(delta);
+              matchCount++;
+              if (originalLinks.TryGetValue(tile, out var oldLinks))
+              {
+                int comparisons = 0;
+                float mismatchScore = 0;
+
+                if (oldLinks.Left != null)
+                {
+                  comparisons++;
+                  if (tile.LeftAngularNeighbor != oldLinks.Left) mismatchScore += 1f;
+                }
+                if (oldLinks.Right != null)
+                {
+                  comparisons++;
+                  if (tile.RightAngularNeighbor != oldLinks.Right) mismatchScore += 1f;
+                }
+                if (oldLinks.Top != null)
+                {
+                  comparisons++;
+                  if (tile.TopAngularNeighbor != oldLinks.Top) mismatchScore += 1f;
+                }
+                if (oldLinks.Bottom != null)
+                {
+                  comparisons++;
+                  if (tile.BottomAngularNeighbor != oldLinks.Bottom) mismatchScore += 1f;
+                }
+
+                totalNeighborError += mismatchScore;
+                neighborComparisons += comparisons;
+              }
+
+            }
           }
         }
 
-        if (bestTile == null) continue;
-
-        Vector2 oldRing = bestTile.GlobalCenter;
-        Vector2 oldOrigin = bestTile.InferredBy.EqTileGlobalCenter;
-
-        float oldDistance = Vector2.Distance(oldRing, oldOrigin);
-        float newDistance = Vector2.Distance(inferred, dp.EqTileGlobalCenter);
-
-        float deltaDistance = newDistance - oldDistance;
-        Vector2 direction = Vector2.Normalize(inferred - dp.EqTileGlobalCenter);
-        Vector2 offset = direction * deltaDistance;
-
-        if (offset.Length() > maxMatchingDistance)
+        int totalPoints = dplist.Count(dp => dp.Distance < 3500);
+        int minValidMatches = Math.Max(10, (int)(totalPoints * minMatchRatio));
+        if (deltas.Count < minValidMatches)
           continue;
 
-        // 👇 Apply correction directly
-        dp.OriginalDevicePosition += offset;
-      }
-    }
+        float avgAlignmentScore = alignmentSamples > 0 ? alignmentScoreSum / alignmentSamples : 1f;
 
-    public Vector2 CalculateAngleLockedRingCorrection(
-        List<DataPoint> currentBatch,
-        Dictionary<int, List<Tile>> angleToTilesDict,
-        Vector2 currentDevicePosition)
-    {
-      const float maxMatchingDistance = 50f;
-      const int minRequiredMatches = 5;
+        var simulatedTiles = NeighborConsistencyChecker.SimulateNewTilePlacement(dplist, guessedDevicePosition + candidate);
+        var simulatedLinks = NeighborConsistencyChecker.BuildNeighborLinkSnapshot(simulatedTiles);
+        var result = NeighborConsistencyChecker.CompareNeighborLinks(originalLinks, simulatedLinks);
+        float consistencyScore = result.ConsistencyScore;
 
-      List<Vector2> offsets = new();
+        // 📊 Adjust thresholds based on match strength
+        bool reject = false;
 
-      foreach (var dp in currentBatch)
-      {
-        if (dp.Distance != 3500) continue; // Skip clamped ones
-
-        float yaw = MathHelper.ToRadians(dp.Yaw);
-        float raw = MathHelper.ToRadians(dp.Angle);
-        float adjustedAngle = raw + yaw;
-
-        Vector2 inferred = currentDevicePosition + new Vector2(
-            MathF.Cos(adjustedAngle) * 3500,
-            MathF.Sin(adjustedAngle) * 3500
-        );
-
-        int angleKey = (int)(MathHelper.ToDegrees(adjustedAngle) * 10) % 3600;
-        if (angleKey < 0) angleKey += 3600;
-
-        if (!angleToTilesDict.TryGetValue(angleKey, out var tileList) || tileList.Count == 0)
-          continue;
-
-        // Find closest tile for this angle
-        Tile closest = tileList
-            .OrderBy(t => Vector2.Distance(t.GlobalCenter, inferred))
-            .FirstOrDefault();
-
-        if (closest == null) continue;
-
-        Vector2 offset = closest.GlobalCenter - inferred;
-
-        if (offset.Length() > maxMatchingDistance)
-          continue;
-
-        offsets.Add(offset);
-      }
-
-      if (offsets.Count < minRequiredMatches)
-      {
-        Debug.WriteLine("🚫 Not enough matched angles for ring correction.");
-        return Vector2.Zero;
-      }
-
-      return ComputeStableOffsetWithMAD(offsets, maxMatchingDistance);
-    }
-    public Vector2 EstimateOffsetFromRingTilesRawAngleMatch(
-    List<DataPoint> currentBatch,
-    Dictionary<int, List<Tile>> angleToTilesByRawAngle)
-    {
-      const float maxMatchingDistance = 50f;       // mm
-      const float maxOffsetPerUpdate = 100f;       // mm
-      const int minMatchesRequired = 10;
-      const float smoothingFactor = 0.05f;
-      const float minOffsetThreshold = 3f;
-
-      List<Vector2> offsets = new();
-
-      foreach (var dp in currentBatch)
-      {
-        if (dp.Distance >= 3500) continue; // Skip inferred ring points
-
-        int rawAngleKey = (int)(dp.Angle * 10f) % 3600;
-        if (rawAngleKey < 0) rawAngleKey += 3600;
-
-        if (!angleToTilesByRawAngle.TryGetValue(rawAngleKey, out var tileList))
-          continue;
-
-        // Get the original hit location
-        Vector2 newMeasuredPos = dp.EqTileGlobalCenter;
-
-        // Try to find a tile whose InferredBy matches this angle
-        Tile bestMatch = null;
-        float bestDist = float.MaxValue;
-
-        foreach (var tile in tileList)
+        // 🚫 Reject if both are bad
+        if (consistencyScore < 0.4f && avgAlignmentScore > 0.8f)
         {
-          if (tile.InferredBy == null) continue;
+          reject = true;
+        } else if (consistencyScore < 0.5f && avgAlignmentScore > 0.9f)
+        {
+          reject = true;
+        }
+          // ✅ Allow high alignment if structure is strong
+          else if (avgAlignmentScore >= 0.98f && consistencyScore >= 0.85f)
+        {
+          reject = false;
+        }
+          // ✅ Allow low consistency if alignment is orthogonal (indicates structure break)
+          else if (consistencyScore >= 0.3f && avgAlignmentScore < 0.65f)
+        {
+          reject = false;
+        }
+        // Accept perfect alignment if consistency is strong and enough points match
+        else if (avgAlignmentScore >= 0.99f)
+        {
+          if (consistencyScore >= 0.8f && matchCount >= 40)
+            reject = false;
+          else
+            reject = true;
+        }
 
-          float dist = Vector2.Distance(newMeasuredPos, tile.InferredBy.EqTileGlobalCenter);
-          if (dist < bestDist && dist < maxMatchingDistance)
+        //if (reject)
+        //{
+        //  Debug.WriteLine($"❌ Offset {candidate} rejected.");
+        //  Debug.WriteLine($"⚠️ matchCount={matchCount}, deltas={deltas.Count}, align={avgAlignmentScore:F2}, consistency={consistencyScore:F2}");
+        //} else
+        //{
+          //Debug.WriteLine($"✅ Offset {candidate} accepted.");
+        //}
+
+
+
+
+        float avgNeighborError = neighborComparisons > 0 ? totalNeighborError / neighborComparisons : float.MaxValue;
+
+        if (matchCount > bestMatchCount || (matchCount == bestMatchCount && avgAlignmentScore < bestAvgAlignmentScore))
+        {
+          bestOffset = candidate;
+          bestMatchCount = matchCount;
+          bestMatchedDeltas = deltas;
+          bestAvgNeighborError = avgNeighborError;
+          bestAvgAlignmentScore = avgAlignmentScore;
+        }
+      }
+
+      if (bestMatchCount == 0 || bestMatchedDeltas.Count == 0)
+        return (Vector2.Zero, 0, float.MaxValue);
+      //Debug.WriteLine($"🏁 Final chosen offset = {bestOffset}, matches = {bestMatchCount}, neighborErr = {bestAvgNeighborError:F2}");
+
+      return (bestOffset, bestMatchCount, bestAvgNeighborError);
+    }
+
+
+
+    private float ComputeAlignmentScore(Vector2 offsetDirection, Tile tile)
+    {
+      if (offsetDirection.LengthSquared() < 0.0001f)
+        return 0f; // No movement = no alignment
+
+      Vector2 normalizedOffset = Vector2.Normalize(offsetDirection);
+      List<Vector2> neighborDirections = new();
+
+      if (tile.LeftAngularNeighbor != null)
+        neighborDirections.Add(Vector2.Normalize(tile.LeftAngularNeighbor.GlobalCenter - tile.GlobalCenter));
+      if (tile.RightAngularNeighbor != null)
+        neighborDirections.Add(Vector2.Normalize(tile.RightAngularNeighbor.GlobalCenter - tile.GlobalCenter));
+      if (tile.TopAngularNeighbor != null)
+        neighborDirections.Add(Vector2.Normalize(tile.TopAngularNeighbor.GlobalCenter - tile.GlobalCenter));
+      if (tile.BottomAngularNeighbor != null)
+        neighborDirections.Add(Vector2.Normalize(tile.BottomAngularNeighbor.GlobalCenter - tile.GlobalCenter));
+
+      if (neighborDirections.Count == 0)
+        return 1f; // No neighbors = assume bad alignment (max penalty)
+
+      float totalDot = 0f;
+      foreach (var dir in neighborDirections)
+        totalDot += MathF.Abs(Vector2.Dot(normalizedOffset, dir)); // Use abs to account for both directions
+
+      float averageDot = totalDot / neighborDirections.Count;
+      return averageDot; // Closer to 1 = high alignment, 0 = orthogonal
+    }
+
+
+    public void LinkNearestNeighborsByProximity(List<Tile> allTiles)
+    {
+      float maxSearchDistance = 100f; // mm
+      float coneHalfAngleDegrees = 45f;
+
+      foreach (Tile tile in allTiles)
+      {
+        Vector2 origin = tile.GlobalCenter;
+
+        Tile leftBest = null, rightBest = null, topBest = null, bottomBest = null;
+        float leftBestScore = float.MinValue;
+        float rightBestScore = float.MinValue;
+        float topBestScore = float.MinValue;
+        float bottomBestScore = float.MinValue;
+
+        foreach (Tile candidate in allTiles)
+        {
+          if (candidate == tile)
+            continue;
+
+          Vector2 toTarget = candidate.GlobalCenter - origin;
+          float dist = toTarget.Length();
+          if (dist > maxSearchDistance) continue;
+
+          Vector2 dir = Vector2.Normalize(toTarget);
+
+          float dotLeft = Vector2.Dot(dir, new Vector2(-1, 0));
+          float dotRight = Vector2.Dot(dir, new Vector2(1, 0));
+          float dotUp = Vector2.Dot(dir, new Vector2(0, -1));
+          float dotDown = Vector2.Dot(dir, new Vector2(0, 1));
+
+          // We favor closer + better aligned in direction
+          float scoreLeft = dotLeft * (1f / dist);
+          float scoreRight = dotRight * (1f / dist);
+          float scoreUp = dotUp * (1f / dist);
+          float scoreDown = dotDown * (1f / dist);
+
+          if (dotLeft > MathF.Cos(MathHelper.ToRadians(coneHalfAngleDegrees)) && scoreLeft > leftBestScore)
           {
-            bestDist = dist;
-            bestMatch = tile;
+            leftBest = candidate;
+            leftBestScore = scoreLeft;
+          } else if (dotRight > MathF.Cos(MathHelper.ToRadians(coneHalfAngleDegrees)) && scoreRight > rightBestScore)
+          {
+            rightBest = candidate;
+            rightBestScore = scoreRight;
+          } else if (dotUp > MathF.Cos(MathHelper.ToRadians(coneHalfAngleDegrees)) && scoreUp > topBestScore)
+          {
+            topBest = candidate;
+            topBestScore = scoreUp;
+          } else if (dotDown > MathF.Cos(MathHelper.ToRadians(coneHalfAngleDegrees)) && scoreDown > bottomBestScore)
+          {
+            bottomBest = candidate;
+            bottomBestScore = scoreDown;
           }
         }
 
-        if (bestMatch == null) continue;
-
-        // Compute expected offset from where this tile was originally inferred
-        Vector2 establishedMeasured = bestMatch.InferredBy.EqTileGlobalCenter;
-        Vector2 delta = establishedMeasured - newMeasuredPos;
-
-        if (delta.Length() > maxMatchingDistance)
-          continue;
-
-        offsets.Add(delta);
+        tile.LeftAngularNeighbor = leftBest;
+        tile.RightAngularNeighbor = rightBest;
+        tile.TopAngularNeighbor = topBest;
+        tile.BottomAngularNeighbor = bottomBest;
       }
-
-      if (offsets.Count < minMatchesRequired)
-      {
-        //Debug.WriteLine($"❌ Not enough raw-angle matches ({offsets.Count}), skipping update.");
-        return Vector2.Zero;
-      }
-
-      Vector2 stableOffset = ComputeStableOffsetWithMAD(offsets, maxOffsetPerUpdate);
-
-      if (stableOffset.Length() > maxOffsetPerUpdate)
-      {
-        stableOffset = Vector2.Normalize(stableOffset) * maxOffsetPerUpdate;
-        Debug.WriteLine($"⚠️ Clamped offset to {stableOffset}");
-      }
-
-      Vector2 smoothedOffset = Vector2.Lerp(_previousOffset, stableOffset, smoothingFactor);
-
-      if (smoothedOffset.Length() < minOffsetThreshold)
-      {
-        //Debug.WriteLine($"🛑 Offset below threshold: {smoothedOffset.Length():F2}mm — skipping update.");
-        return Vector2.Zero;
-      }
-
-      _previousOffset = smoothedOffset;
-      return smoothedOffset;
     }
 
 
-    public Vector2 EstimateOffsetFromRingTiles(
-        List<DataPoint> currentBatch,
-        Dictionary<int, List<Tile>> angleToTilesDict)
+    private bool IsInDirectionCone(Vector2 toTarget, Vector2 baseDir, float coneHalfAngleDegrees)
     {
-      const float maxMatchingDistance = 50f;
-      const float maxOffsetPerUpdate = 100f;
-      const int minMatchesRequired = 10;
-      const float smoothingFactor = 0.05f;
-      const float minOffsetThreshold = 2f;
-
-      var deltas = new List<Vector2>();
-
-      foreach (var dp in currentBatch)
-      {
-        if (dp.Distance >= 3500) continue;
-
-        Vector2 origin = dp.OriginalDevicePosition;
-        float angleRad = MathHelper.ToRadians(dp.Angle + dp.Yaw);
-
-        // Calculate inferred ring point at 3500mm along beam
-        Vector2 inferred = origin + new Vector2(
-            MathF.Cos(angleRad) * 3500,
-            MathF.Sin(angleRad) * 3500
-        );
-
-        int adjustedAngleKey = (int)(MathHelper.ToDegrees(angleRad) * 10) % 3600;
-        if (adjustedAngleKey < 0) adjustedAngleKey += 3600;
-
-        if (!angleToTilesDict.TryGetValue(adjustedAngleKey, out var tileList))
-          continue;
-
-        // Find closest matching established ring tile at this angle
-        Tile bestTile = null;
-        float bestDist = float.MaxValue;
-
-        foreach (var tile in tileList)
-        {
-          float dist = Vector2.Distance(inferred, tile.GlobalCenter);
-          if (dist < bestDist && dist <= maxMatchingDistance && tile.InferredBy != null)
-          {
-            bestDist = dist;
-            bestTile = tile;
-          }
-        }
-
-        if (bestTile == null) continue;
-
-        // Previously established positions (global coordinates)
-        Vector2 oldRingGlobal = bestTile.GlobalCenter;
-        Vector2 oldMeasuredGlobal = bestTile.InferredBy.EqTileGlobalCenter;
-
-        // Previous distance between measured and ring tile
-        float oldDistance = Vector2.Distance(oldRingGlobal, oldMeasuredGlobal);
-
-        // New measured position (global), based on current estimate
-        Vector2 newMeasuredGlobal = dp.EqTileGlobalCenter;
-
-        // New inferred position (just calculated above as 'inferred')
-        Vector2 newRingGlobal = inferred;
-
-        // New distance between newly measured and inferred positions
-        float newDistance = Vector2.Distance(newMeasuredGlobal, newRingGlobal);
-
-        // The difference clearly indicates device moved closer or farther
-        float distanceDelta = newDistance - oldDistance;
-
-        // Direction clearly: from measured point to inferred ring point
-        Vector2 direction = Vector2.Normalize(newRingGlobal - newMeasuredGlobal);
-
-        // Offset vector clearly indicates exact required movement
-        Vector2 offset = direction * distanceDelta;
-
-        // CRITICAL: explicitly filter overly large offsets
-        if (offset.Length() > maxMatchingDistance)
-          continue;
-
-        deltas.Add(offset);
-      }
-
-      if (deltas.Count < minMatchesRequired)
-      {
-        //Debug.WriteLine($"❌ Not enough matches ({deltas.Count}), skipping update.");
-        return Vector2.Zero;
-      }
-
-      Vector2 stableOffset = ComputeStableOffsetWithMAD(deltas, maxOffsetPerUpdate);
-
-      if (stableOffset.Length() > maxOffsetPerUpdate)
-      {
-        stableOffset = Vector2.Normalize(stableOffset) * maxOffsetPerUpdate;
-        Debug.WriteLine($"⚠️ Clamped offset to {stableOffset}");
-      }
-
-      Vector2 smoothedOffset = Vector2.Lerp(_previousOffset, stableOffset, smoothingFactor);
-
-      if (smoothedOffset.Length() < minOffsetThreshold)
-      {
-        Debug.WriteLine($"🛑 Offset below threshold: {smoothedOffset.Length():F2}mm — skipping update.");
-        return Vector2.Zero;
-      }
-
-      _previousOffset = smoothedOffset;
-      //Debug.WriteLine($"📐 Smoothed offset = {smoothedOffset}");
-      return smoothedOffset;
+      float dot = Vector2.Dot(Vector2.Normalize(toTarget), Vector2.Normalize(baseDir));
+      float angle = MathF.Acos(Math.Clamp(dot, -1f, 1f)) * (180f / MathF.PI);
+      return angle <= coneHalfAngleDegrees;
     }
 
 
 
-
-    private Vector2 ComputeStableOffsetWithMAD(List<Vector2> deltas, float maxOffsetPerUpdate)
+    private void LinkAngularNeighbors()
     {
-      if (deltas.Count == 0) return Vector2.Zero;
+      var angleMap = UtilityProvider.Map.AngularTileMap;
+      const int maxAngleKey = 3599;
+      const int maxSearchSteps = 1800; // search up to half the circle
 
-      // Step 1: Median
-      var sortedX = deltas.Select(d => d.X).OrderBy(x => x).ToList();
-      var sortedY = deltas.Select(d => d.Y).OrderBy(y => y).ToList();
-      float medianX = sortedX[deltas.Count / 2];
-      float medianY = sortedY[deltas.Count / 2];
-      var median = new Vector2(medianX, medianY);
+      foreach (var kvp in angleMap)
+      {
+        int key = kvp.Key;
+        Tile tile = kvp.Value;
 
-      // Step 2: Compute MAD (Median Absolute Deviation)
-      var deviations = deltas
-          .Select(d => Vector2.Distance(d, median))
-          .OrderBy(d => d)
-          .ToList();
-      float mad = deviations[deviations.Count / 2];
-
-      const float madMultiplier = 2.5f;  // Sensitivity; lower = stricter
-      float threshold = mad * madMultiplier;
-
-      // Step 3: Filter out large deviations from the median
-      var filtered = deltas
-          .Where(d => Vector2.Distance(d, median) <= threshold)
-          .ToList();
-
-      if (filtered.Count == 0)
-        return Vector2.Zero;
-
-      // Step 4: Average of filtered values
-      Vector2 average = filtered.Aggregate(Vector2.Zero, (acc, d) => acc + d) / filtered.Count;
-
-      // Step 5: Clamp
-      if (average.Length() > maxOffsetPerUpdate)
-        average = Vector2.Normalize(average) * maxOffsetPerUpdate;
-
-      return average;
+        tile.LeftAngularNeighbor = FindClosestAngleNeighbor(angleMap, key, direction: -1, maxSearchSteps);
+        tile.RightAngularNeighbor = FindClosestAngleNeighbor(angleMap, key, direction: 1, maxSearchSteps);
+      }
     }
 
-    private Vector2 ComputeMedianOffset(List<Vector2> deltas)
+    private Tile FindClosestAngleNeighbor(Dictionary<int, Tile> angleMap, int startKey, int direction, int maxSteps)
     {
-      if (deltas.Count == 0) return Vector2.Zero;
-
-      var sortedX = deltas.Select(d => d.X).OrderBy(x => x).ToList();
-      var sortedY = deltas.Select(d => d.Y).OrderBy(y => y).ToList();
-
-      float medianX = sortedX[deltas.Count / 2];
-      float medianY = sortedY[deltas.Count / 2];
-
-      return new Vector2(medianX, medianY);
+      for (int step = 1; step <= maxSteps; step++)
+      {
+        int searchKey = (startKey + direction * step + 3600) % 3600;
+        if (angleMap.TryGetValue(searchKey, out var neighbor))
+          return neighbor;
+      }
+      return null;
     }
+
 
 
     public HashSet<Tile> GetPermanentTiles()
@@ -693,6 +675,7 @@ namespace RPLIDAR_Mapping.Features.Map
               isRingPoint
           );
           mapPoint.EqTileGlobalCenter = dp.EqTileGlobalCenter;
+          mapPoint.EqTilePosition = dp.EqTilePosition;
 
           addedPoints.Add(mapPoint);
           // Add an inferred ringpoint behind every normal point
@@ -726,69 +709,47 @@ namespace RPLIDAR_Mapping.Features.Map
       }
       AddedPoints = addedPoints;
     }
-    public List<MapPoint> SimulateAddingPoints(List<DataPoint> dplist, Vector2 devicePos)
+
+    private Vector2 ComputeMedian(List<Vector2> vectors)
     {
-      List<MapPoint> simulatedPoints = new();
-      foreach (DataPoint dp in dplist)
-      {
-        if (dp.Distance >= 3500) continue;
-
-        float yawRadians = MathHelper.ToRadians(dp.Yaw);
-        float adjustedAngle = MathHelper.ToRadians(dp.Angle) + yawRadians;
-
-        float inferredX = devicePos.X + 3500 * MathF.Cos(adjustedAngle);
-        float inferredY = devicePos.Y + 3500 * MathF.Sin(adjustedAngle);
-        Vector2 inferredGlobal = new(inferredX, inferredY);
-
-        MapPoint inferredRingPoint = new MapPoint(
-            3500 * MathF.Cos(adjustedAngle),
-            3500 * MathF.Sin(adjustedAngle),
-            dp.Angle, 3500,
-            adjustedAngle, MathHelper.ToRadians(dp.Angle),
-            dp.Quality,
-            inferredGlobal.X, inferredGlobal.Y,
-            devicePos,
-            yawRadians,
-            true
-        );
-        inferredRingPoint.IsInferredRingPoint = true;
-
-        simulatedPoints.Add(inferredRingPoint);
-      }
-      return simulatedPoints;
-    }
-    public Vector2 CalculateCorrectiveOffset(List<MapPoint> simulatedRingPoints, Dictionary<int, List<Tile>> establishedRingDict)
-    {
-      const float maxMatchDistance = 50f;
-      List<Vector2> correctiveOffsets = new();
-
-      foreach (var inferredPoint in simulatedRingPoints)
-      {
-        int angleKey = (int)(MathHelper.ToDegrees(inferredPoint.Radians) * 10) % 3600;
-        if (angleKey < 0) angleKey += 3600;
-
-        if (!establishedRingDict.TryGetValue(angleKey, out var establishedTiles))
-          continue;
-
-        Tile closestTile = establishedTiles
-            .OrderBy(t => Vector2.Distance(inferredPoint.EqTileGlobalCenter, t.GlobalCenter))
-            .FirstOrDefault();
-
-        if (closestTile == null) continue;
-
-        Vector2 offset = closestTile.GlobalCenter - inferredPoint.EqTileGlobalCenter;
-
-        if (offset.Length() > maxMatchDistance) continue;
-
-        correctiveOffsets.Add(offset);
-      }
-
-      if (correctiveOffsets.Count == 0)
+      if (vectors.Count == 0)
         return Vector2.Zero;
 
-      return ComputeStableOffsetWithMAD(correctiveOffsets, maxMatchDistance);
+      var xs = vectors.Select(v => v.X).OrderBy(x => x).ToList();
+      var ys = vectors.Select(v => v.Y).OrderBy(y => y).ToList();
+
+      float medianX = xs[xs.Count / 2];
+      float medianY = ys[ys.Count / 2];
+
+      return new Vector2(medianX, medianY);
+    }
+    private List<Vector2> FilterOutliersMAD(List<Vector2> deltas, float madMultiplier = 2.5f)
+    {
+      if (deltas.Count == 0)
+        return deltas;
+
+      Vector2 median = ComputeMedian(deltas);
+      List<float> distances = deltas.Select(d => Vector2.Distance(d, median)).ToList();
+
+      float mad = ComputeMedian(distances);
+
+      float threshold = mad * madMultiplier;
+
+      return deltas
+          .Where(d => Vector2.Distance(d, median) < threshold)
+          .ToList();
     }
 
+    private float ComputeMedian(List<float> values)
+    {
+      if (values.Count == 0)
+        return 0f;
+
+      var sorted = values.OrderBy(v => v).ToList();
+      return sorted[sorted.Count / 2];
+    }
+
+  
 
 
   }

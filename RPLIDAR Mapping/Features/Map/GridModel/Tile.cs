@@ -27,7 +27,7 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
     public bool IsTrusted { get;  set; }
 
     private Texture2D _TileTexture { get; set; }
-    public Rectangle WorldRect { get; private set; }
+    public Rectangle WorldRect { get; set; }
     public Rectangle ScreenRect { get; private set; }
     public Vector2 Position { get; set; }
     public Vector2 GlobalCenter { get; set; }
@@ -35,9 +35,13 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
 
     public TileCluster Cluster { get; set; } = null;
     public MapPoint _lastLIDARpoint { get; set; }
+    public DataPoint LastDataPoint {  get; set; }
     private readonly SpriteBatch _SpriteBatch;
     public int _tileSize {  get; set; }
-
+    public Tile LeftAngularNeighbor { get; set; }
+    public Tile RightAngularNeighbor { get; set; }
+    public Tile TopAngularNeighbor { get; set; }
+    public Tile BottomAngularNeighbor { get; set; }
     public int TrustDurationCounter { get; private set; }
     public float TrustedScore { get; set; }
     public int AmountofDecays { get; set; }
@@ -65,13 +69,15 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
       TrustedScore = 0;
       pointsHitAtThisTile = 0;
       IsDrawn = false;
-      _selfGrid = grid;
+
       //_tileSize = _selfGrid.tileSize;
       _tileSize = 10;
       //  Get the global position of the grid first
-      Vector2 gridGlobalPosition = _selfGrid.GridPosition;
+
       //  Get the tile's position relative to the grid
       Position = new Vector2(X * _tileSize, Y * _tileSize);
+      _selfGrid = grid;
+      Vector2 gridGlobalPosition = _selfGrid.GridPosition;
       WorldGlobalPosition = gridGlobalPosition + Position;
       
 
