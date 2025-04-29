@@ -12,7 +12,7 @@ namespace RPLIDAR_Mapping {
     
     
     [global::System.Runtime.CompilerServices.CompilerGeneratedAttribute()]
-    [global::System.CodeDom.Compiler.GeneratedCodeAttribute("Microsoft.VisualStudio.Editors.SettingsDesigner.SettingsSingleFileGenerator", "17.12.0.0")]
+    [global::System.CodeDom.Compiler.GeneratedCodeAttribute("Microsoft.VisualStudio.Editors.SettingsDesigner.SettingsSingleFileGenerator", "17.13.0.0")]
     internal sealed partial class AppSettings : global::System.Configuration.ApplicationSettingsBase {
         
         private static AppSettings defaultInstance = ((AppSettings)(global::System.Configuration.ApplicationSettingsBase.Synchronized(new AppSettings())));
@@ -49,7 +49,7 @@ namespace RPLIDAR_Mapping {
         
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("f")]
+        [global::System.Configuration.DefaultSettingValueAttribute("nyUu4MgAWhTG")]
         public string WiFiPassword {
             get {
                 return ((string)(this["WiFiPassword"]));
@@ -61,7 +61,7 @@ namespace RPLIDAR_Mapping {
         
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("f")]
+        [global::System.Configuration.DefaultSettingValueAttribute("Telia-2G-B9A841")]
         public string WiFiSSID {
             get {
                 return ((string)(this["WiFiSSID"]));
@@ -85,7 +85,7 @@ namespace RPLIDAR_Mapping {
         
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("192.168.0.44")]
+        [global::System.Configuration.DefaultSettingValueAttribute("192.168.0.147")]
         public string mqttServer {
             get {
                 return ((string)(this["mqttServer"]));
@@ -109,7 +109,7 @@ namespace RPLIDAR_Mapping {
         
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("COM4")]
+        [global::System.Configuration.DefaultSettingValueAttribute("COM3")]
         public string SerialPort {
             get {
                 return ((string)(this["SerialPort"]));
@@ -223,7 +223,7 @@ namespace RPLIDAR_Mapping {
         
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("serial")]
+        [global::System.Configuration.DefaultSettingValueAttribute("wifi")]
         public string CommunicationProtocol {
             get {
                 return ((string)(this["CommunicationProtocol"]));

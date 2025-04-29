@@ -81,7 +81,8 @@ namespace RPLIDAR_Mapping.Features.Map.Algorithms
       }
 
       // Only simulate links for the affected tiles
-      UtilityProvider.Map.LinkNearestNeighborsByProximity(simulatedTiles);
+      AlgorithmProvider.TileMerge.LinkNearestNeighborsByProximity(simulatedTiles);
+      //UtilityProvider.Map.LinkNearestNeighborsByProximity(simulatedTiles);
       return simulatedTiles;
     }
 

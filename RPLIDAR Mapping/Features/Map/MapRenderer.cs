@@ -50,6 +50,8 @@ namespace RPLIDAR_Mapping.Features.Map
     public int MainScreenHeight = GraphicsAdapter.DefaultAdapter.CurrentDisplayMode.Height;
     public bool DrawCycleActive = false;
     public bool DrawSightLines { get; set; } = false;
+    public bool DrawTilesToMap { get; set; } = true;
+    public bool DrawRingTilesToMap { get; set; } = false;
     public Vector2 MainScreenSize;
     public Device _device;
     public Vector2 _centerOfFullMap { get; set; }
@@ -130,7 +132,7 @@ namespace RPLIDAR_Mapping.Features.Map
 
         // 🟢 Draw grid tiles
         Vector2 deviceScreenPos = camera.WorldToScreen(devicePosition);
-        DrawTiles(_SpriteBatch, gridScreenPos, grid, deviceScreenPos);
+        if(DrawTilesToMap)DrawTiles(_SpriteBatch, gridScreenPos, grid, deviceScreenPos);
         DrawRingTiles(_SpriteBatch, gridScreenPos, grid, deviceScreenPos);
         //  Debug visualization
         //DrawingHelperFunctions.DrawRectangleBorder(_SpriteBatch, new Rectangle((int)gridScreenPos.X, (int)gridScreenPos.Y, 15, 15), 5, Color.Green);
@@ -316,11 +318,40 @@ namespace RPLIDAR_Mapping.Features.Map
     {
       foreach (var cluster in _TileMerge.TileClusters)
       {
-        Rectangle rect = cluster.Bounds;
-        Rectangle screenRect = _Camera.WorldToScreen(rect);
-        DrawingHelperFunctions.DrawRectangleBorder(_SpriteBatch, screenRect, 2, Color.White);
+        // ✅ Only draw if it has enough tiles and size
+        if (cluster.Tiles.Count < 5)
+          continue; // Too small, skip
+
+        if (cluster.BoundsSize.LengthSquared() < 1f)
+          continue; // Too tiny cluster
+
+        Vector2 centerScreen = _Camera.WorldToScreen(cluster.BoundsCenter);
+        float rotation = cluster.BoundsRotation;
+        float scale = MapScaleManager.Instance.ScaleFactor;
+        Vector2 sizeScreen = (cluster.BoundsSize / scale) * _Camera.Zoom;
+
+        // ✅ Extra check to avoid NaN / weirdness
+        if (float.IsNaN(centerScreen.X) || float.IsNaN(centerScreen.Y) ||
+            float.IsNaN(sizeScreen.X) || float.IsNaN(sizeScreen.Y))
+          continue;
+
+        // 🔥 Compute 4 corners rotated around center
+        Vector2 halfSize = sizeScreen / 2f;
+        Matrix rotationMatrix = Matrix.CreateRotationZ(rotation);
+
+        Vector2 topLeft = Vector2.Transform(new Vector2(-halfSize.X, -halfSize.Y), rotationMatrix) + centerScreen;
+        Vector2 topRight = Vector2.Transform(new Vector2(halfSize.X, -halfSize.Y), rotationMatrix) + centerScreen;
+        Vector2 bottomRight = Vector2.Transform(new Vector2(halfSize.X, halfSize.Y), rotationMatrix) + centerScreen;
+        Vector2 bottomLeft = Vector2.Transform(new Vector2(-halfSize.X, halfSize.Y), rotationMatrix) + centerScreen;
+
+        // ✅ Draw lines between corners
+        DrawingHelperFunctions.DrawLine(_SpriteBatch, topLeft, topRight, Color.White, 2);
+        DrawingHelperFunctions.DrawLine(_SpriteBatch, topRight, bottomRight, Color.White, 2);
+        DrawingHelperFunctions.DrawLine(_SpriteBatch, bottomRight, bottomLeft, Color.White, 2);
+        DrawingHelperFunctions.DrawLine(_SpriteBatch, bottomLeft, topLeft, Color.White, 2);
       }
     }
+
     private void DrawMatchedPairs()
     {
       foreach (var (from, to) in _map.MatchedPairs)
@@ -337,8 +368,8 @@ namespace RPLIDAR_Mapping.Features.Map
 
       foreach (Tile tile in grid._drawnTiles.Values)
       {
-        tile.WorldGlobalPosition = tile._selfGrid.GridPosition + tile.Position;
-        tile.GlobalCenter = tile.WorldGlobalPosition + new Vector2(tile._tileSize / 2f, tile._tileSize / 2f);
+        //tile.WorldGlobalPosition = tile._selfGrid.GridPosition + tile.Position;
+        //tile.GlobalCenter = tile.WorldGlobalPosition + new Vector2(tile._tileSize / 2f, tile._tileSize / 2f);
 
         Vector2 worldPos = tile.WorldGlobalPosition;
         Vector2 screenPos = camera.WorldToScreen(worldPos);
@@ -359,8 +390,8 @@ namespace RPLIDAR_Mapping.Features.Map
 
       foreach (Tile tile in grid.RingTiles)
       {
-        tile.WorldGlobalPosition = tile._selfGrid.GridPosition + tile.Position;
-        tile.GlobalCenter = tile.WorldGlobalPosition + new Vector2(tile._tileSize / 2f, tile._tileSize / 2f);
+        //tile.WorldGlobalPosition = tile._selfGrid.GridPosition + tile.Position;
+        //tile.GlobalCenter = tile.WorldGlobalPosition + new Vector2(tile._tileSize / 2f, tile._tileSize / 2f);
 
         Vector2 worldPos = tile.WorldGlobalPosition;
         Vector2 screenPos = camera.WorldToScreen(worldPos);

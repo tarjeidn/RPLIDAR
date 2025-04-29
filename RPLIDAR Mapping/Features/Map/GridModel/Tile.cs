@@ -33,7 +33,8 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
     public Vector2 GlobalCenter { get; set; }
     public Vector2 WorldGlobalPosition { get; set; }
 
-    public TileCluster Cluster { get; set; } = null;
+    public TileCluster? Cluster { get; set; } = null;
+    public int FramesInCluster = 0;
     public MapPoint _lastLIDARpoint { get; set; }
     public DataPoint LastDataPoint {  get; set; }
     private readonly SpriteBatch _SpriteBatch;
@@ -52,6 +53,9 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
     public bool IsRingTile { get; set; } = false;
     public bool IsInferredRingTile { get; set; } = false;
     public MapPoint InferredBy { get; set; }
+    public bool IsClusterEnd { get; set; }
+    public bool IsClusterIsolated { get; set; }
+    public bool IsClusterMiddle { get; set; }
     public struct Observation
     {
       public Vector2 DevicePosition;
@@ -89,6 +93,15 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
 
       _TileTexture = ContentManagerProvider.GetTexture("tiletexture");
       TTR = AlgorithmProvider.TileTrustRegulator;
+    }
+    public List<Tile> GetNeighbors()
+    {
+      List<Tile> neighbors = new();
+      if (LeftAngularNeighbor != null) neighbors.Add(LeftAngularNeighbor);
+      if (RightAngularNeighbor != null) neighbors.Add(RightAngularNeighbor);
+      if (TopAngularNeighbor != null) neighbors.Add(TopAngularNeighbor);
+      if (BottomAngularNeighbor != null) neighbors.Add(BottomAngularNeighbor);
+      return neighbors;
     }
     public void RegisterObservation(Vector2 devicePosition, float angle, float distance)
     {

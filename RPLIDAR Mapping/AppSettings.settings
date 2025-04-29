@@ -9,22 +9,22 @@
       <Value Profile="(Default)">2000</Value>
     </Setting>
     <Setting Name="WiFiPassword" Type="System.String" Scope="User">
-      <Value Profile="(Default)">f</Value>
+      <Value Profile="(Default)">nyUu4MgAWhTG</Value>
     </Setting>
     <Setting Name="WiFiSSID" Type="System.String" Scope="User">
-      <Value Profile="(Default)">f</Value>
+      <Value Profile="(Default)">Telia-2G-B9A841</Value>
     </Setting>
     <Setting Name="AllowResizing" Type="System.Boolean" Scope="User">
       <Value Profile="(Default)">True</Value>
     </Setting>
     <Setting Name="mqttServer" Type="System.String" Scope="User">
-      <Value Profile="(Default)">192.168.0.44</Value>
+      <Value Profile="(Default)">192.168.0.147</Value>
     </Setting>
     <Setting Name="mqttPort" Type="System.Int32" Scope="User">
       <Value Profile="(Default)">1883</Value>
     </Setting>
     <Setting Name="SerialPort" Type="System.String" Scope="User">
-      <Value Profile="(Default)">COM4</Value>
+      <Value Profile="(Default)">COM3</Value>
     </Setting>
     <Setting Name="MapZoom" Type="System.Single" Scope="User">
       <Value Profile="(Default)">1</Value>
@@ -54,7 +54,7 @@
       <Value Profile="(Default)">False</Value>
     </Setting>
     <Setting Name="CommunicationProtocol" Type="System.String" Scope="User">
-      <Value Profile="(Default)">serial</Value>
+      <Value Profile="(Default)">wifi</Value>
     </Setting>
     <Setting Name="LIDARDataBatchSize" Type="System.Int32" Scope="User">
       <Value Profile="(Default)">50</Value>

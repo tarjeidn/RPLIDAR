@@ -1,52 +1,39 @@
 ﻿using MQTTnet;
+
+using RPLIDAR_Mapping.Interfaces;
+using RPLIDAR_Mapping.Models;
+using RPLIDAR_Mapping.Utilities;
 using System;
 using System.Buffers;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Text;
-using System.Threading.Tasks;
-using Newtonsoft.Json;
-using RPLIDAR_Mapping.Interfaces;
-using RPLIDAR_Mapping.Models;
-using System.Globalization;
 using System.Linq;
-using RPLIDAR_Mapping.Utilities;
-using System.IO.Ports;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace RPLIDAR_Mapping.Features.Communications
 {
   internal class Wireless : ICommunication
   {
-    public enum LiDARState
-    {
-      IDLE,
-      RUNNING,
-      PAUSED
-    }
-
-    private LiDARState _state;
     private IMqttClient _mqttClient;
     private readonly ConcurrentQueue<DataPoint> _dataQueue = new ConcurrentQueue<DataPoint>();
-    public event Action<string> OnMessageReceived;
+
     private readonly string _brokerAddress;
     private readonly int _brokerPort;
     private readonly string _commandTopic;
     private readonly string _dataTopic;
     private readonly string _statusTopic;
-    private string _lastmessageReceived;
+
+    private bool _connecting = false;
+    private bool _shouldReconnect = true;
 
     public bool IsConnected => _mqttClient?.IsConnected ?? false;
-    private bool _isInitialized = false;
-    public bool IsInitialized
-    {
-      get
-      {       
-        return _isInitialized;
-      }
-    }
+    public bool IsInitialized { get; private set; } = false;
+    public event Action<string> OnMessageReceived;
 
-    public Wireless(ConnectionParams conn, string commandTopic = "lidar/commands", string dataTopic = "lidar/data", string statusTopic= "lidar/status")
+    public Wireless(ConnectionParams conn, string commandTopic = "lidar/commands", string dataTopic = "lidar/data", string statusTopic = "lidar/status")
     {
       _brokerAddress = conn.MQTTBrokerAddress;
       _brokerPort = conn.MQTTPort;
@@ -54,326 +41,271 @@ namespace RPLIDAR_Mapping.Features.Communications
       _dataTopic = dataTopic;
       _statusTopic = statusTopic;
 
-      //InitializeMqttClient().Wait();
-      _ = InitializeMqttClient();
-    }
-    //  Send mode selection to Arduino via MQTT
-    public void InitializeMode()
-    {
-      //bool messageSent = false;
-      //while(!messageSent)
-      //{
-      //  if (_mqttClient.IsConnected)
-      //  {
-      //    Send("SET_MODE:WIFI");
-      //    Log("Sent 'SET_MODE:WIFI' via MQTT.");
-      //    messageSent = true;
-      //  }
-      //}
-
-    }
-    private void StartMqttLoop()
-    {
+      Debug.WriteLine($"[Wireless] Created. Broker={_brokerAddress}:{_brokerPort}");
+      Debug.WriteLine("[Wireless] Starting internal MQTT broker...");
       Task.Run(async () =>
       {
-        while (true)
+        try
         {
-          try
-          {
-            await Task.Delay(100); // Delay to prevent high CPU usage
-          }
-          catch (Exception ex)
-          {
-            Log($"Error in MQTT loop: {ex.Message}");
-          }
+          await InternalMqttServer.StartAsync();
+          Debug.WriteLine("[Wireless] Internal MQTT server started.");
+          // Wait a little to ensure server fully binds socket
+          await Task.Delay(1000);
+
+          // Now that server is started, initialize the MQTT client
+          await InitializeMqttClient();
+          _ = InitializeMqttClient();
+        }
+        catch (Exception ex)
+        {
+          Debug.WriteLine($"[Wireless] Failed to start internal MQTT server: {ex.Message}");
         }
       });
+
+
     }
 
     private async Task InitializeMqttClient()
     {
       try
       {
-        Log("Starting MQTT client initialization...");
+        Debug.WriteLine("[Wireless] Initializing MQTT client...");
 
-        _mqttClient = new MqttClientFactory().CreateMqttClient();
+        var factory = new MqttClientFactory();
+        _mqttClient = factory.CreateMqttClient();
 
-        var options = new MqttClientOptionsBuilder()
-            .WithTcpServer(_brokerAddress, _brokerPort)
-            .WithClientId("WirelessClient_" + Guid.NewGuid()) // Unique client ID
-            .Build();
+        _mqttClient.ApplicationMessageReceivedAsync += e => HandleIncomingMessage(e);
 
-        _mqttClient.ConnectedAsync += OnConnectedAsync;
-        _mqttClient.DisconnectedAsync += OnDisconnectedAsync;
-        _mqttClient.ApplicationMessageReceivedAsync += OnMessageReceivedAsync;
+        _mqttClient.DisconnectedAsync += async e =>
+        {
+          Debug.WriteLine("[Wireless] Disconnected from MQTT broker.");
+          IsInitialized = false;
+          _connecting = false;
 
-        Log("Connecting to MQTT broker...");
-        await _mqttClient.ConnectAsync(options);
+          if (_shouldReconnect)
+          {
+            Debug.WriteLine("[Wireless] Waiting 2s then reconnecting...");
+            await Task.Delay(2000);
+            Connect();
+          }
+        };
 
-        _isInitialized = true; // Mark as initialized
-        Log("MQTT client successfully initialized.");
+        _mqttClient.ConnectedAsync += async e =>
+        {
+          Debug.WriteLine("[Wireless] Connected to MQTT broker!");
+          await _mqttClient.SubscribeAsync(_commandTopic);
+          await _mqttClient.SubscribeAsync(_dataTopic);
+          await _mqttClient.SubscribeAsync(_statusTopic);
+          Debug.WriteLine("[Wireless] Subscribed to topics.");
+
+          // 🚀 Send SET_MODE:WIFI immediately after subscribing
+          await _mqttClient.PublishAsync(new MqttApplicationMessageBuilder()
+              .WithTopic(_commandTopic)
+              .WithPayload("SET_MODE:WIFI")
+              .Build());
+
+          Debug.WriteLine("[Wireless] Sent SET_MODE:WIFI command after connection.");
+
+          IsInitialized = true;
+          _connecting = false;
+        };
+
+        Connect();
       }
       catch (Exception ex)
       {
-        Log($"Error initializing MQTT client: {ex.Message}");
+        Debug.WriteLine($"[Wireless] InitializeMqttClient error: {ex.Message}");
       }
-      StartMqttLoop();
-    }
-    public void SetWiFiParameters(string ssid, string password)
-    {
-      int attempts = 0;
-      while (attempts < 5)
-      {
-        if (IsConnected)
-        {
-          string command = $"SET_WIFI {ssid};{password}";
-          Send(command);
-          Log($"Sent Wi-Fi parameters: {command}");
-        }
-        else
-        {
-          Log("Cannot send Wi-Fi parameters: Not connected to MQTT broker.");
-        }
-      }
-
     }
 
-    public void SetMQTTParameters(string broker, int port)
+    private Task HandleIncomingMessage(MqttApplicationMessageReceivedEventArgs e)
     {
-      if (IsConnected)
+      var topic = e.ApplicationMessage.Topic;
+      var payloadSequence = e.ApplicationMessage.Payload; // ReadOnlySequence<byte>
+
+      Debug.WriteLine($"[Wireless] Incoming message on topic: {topic}");
+
+      // Convert to byte[]
+      byte[] payload = payloadSequence.ToArray();
+
+      Debug.WriteLine($"[Wireless] Payload Length: {payload.Length}");
+
+      if (payload.Length > 0)
       {
-        string command = $"SET_MQTT {broker};{port}";
-        Send(command);
-        Log($"Sent MQTT parameters: {command}");
+        // Print first few bytes as hex to check content
+        string hexPreview = BitConverter.ToString(payload.Take(Math.Min(20, payload.Length)).ToArray());
+        Debug.WriteLine($"[Wireless] Payload (first bytes): {hexPreview}");
       }
       else
       {
-        Log("Cannot send MQTT parameters: Not connected to MQTT broker.");
+        Debug.WriteLine($"[Wireless] Payload is empty.");
       }
-    }
 
-    public async void Connect()
-    {
-      if (_mqttClient != null && !_mqttClient.IsConnected)
+      if (topic == _dataTopic)
       {
-        await _mqttClient.ReconnectAsync();
-      }
-    }
+        if (!Utility.IsUtf8String(payload, out string _))
+        {
+          if (payload.Length > 4 && payload[0] == 0xFF && payload[1] == 0xAA &&
+              payload[payload.Length - 2] == 0xEE && payload[payload.Length - 1] == 0xBB)
+          {
+            // Skip start (2 bytes) and end markers (2 bytes)
+            byte[] dataWithoutMarkers = new byte[payload.Length - 4];
+            Array.Copy(payload, 2, dataWithoutMarkers, 0, dataWithoutMarkers.Length);
 
-    public async void Disconnect()
-    {
-      if (_mqttClient != null && _mqttClient.IsConnected)
+            Utility.ProcessLidarBatchBinary(dataWithoutMarkers, _dataQueue);
+          }
+          else
+          {
+            Debug.WriteLine("[Wireless] Invalid packet markers!");
+          }
+        }
+      }
+      else if (topic == _statusTopic)
       {
-        await _mqttClient.DisconnectAsync();
+        string message = Encoding.UTF8.GetString(payload);
+        Debug.WriteLine($"[Wireless] Status message: {message}");
+        OnMessageReceived?.Invoke($"Status: {message}");
       }
+      else if (topic == _commandTopic)
+      {
+        string message = Encoding.UTF8.GetString(payload);
+        Debug.WriteLine($"[Wireless] Command message: {message}");
+        OnMessageReceived?.Invoke($"Command: {message}");
+      }
+
+      return Task.CompletedTask;
     }
 
+
+
+    public void Connect()
+    {
+      if (_mqttClient == null)
+      {
+        Debug.WriteLine("[Wireless] Connect() skipped, no mqttClient");
+        return;
+      }
+
+      if (_mqttClient.IsConnected)
+      {
+        Debug.WriteLine("[Wireless] Already connected, skipping Connect()");
+        return;
+      }
+
+      if (_connecting)
+      {
+        Debug.WriteLine("[Wireless] Already connecting, skipping Connect()");
+        return;
+      }
+
+      _connecting = true;
+
+      Task.Run(async () =>  // <<== 🔥 MOVE CONNECT LOGIC TO A BACKGROUND TASK
+      {
+        int attempt = 0;
+        const int maxAttempts = 99999;
+        const int retryDelayMs = 2000;
+
+        while (_mqttClient != null && !_mqttClient.IsConnected && attempt < maxAttempts)
+        {
+          try
+          {
+            Debug.WriteLine($"[Wireless] Attempting MQTT connect... (attempt {attempt + 1})");
+
+            var options = new MqttClientOptionsBuilder()
+                .WithTcpServer(_brokerAddress, _brokerPort)
+                .WithClientId("MappingClient_" + Guid.NewGuid())
+                .Build();
+
+            await _mqttClient.ConnectAsync(options, CancellationToken.None);
+
+            if (_mqttClient.IsConnected)
+            {
+              Debug.WriteLine("[Wireless] MQTT connect successful!");
+              break;
+            }
+          }
+          catch (ObjectDisposedException)
+          {
+            Debug.WriteLine("[Wireless] MQTT client disposed during connect, stopping retries.");
+            break;
+          }
+          catch (OperationCanceledException)
+          {
+            Debug.WriteLine("[Wireless] MQTT connect cancelled, stopping retries.");
+            break;
+          }
+          catch (Exception ex)
+          {
+            Debug.WriteLine($"[Wireless] MQTT connect attempt {attempt + 1} failed: {ex.Message}");
+
+            await Task.Delay(retryDelayMs);
+          }
+
+          attempt++;
+        }
+
+        _connecting = false;
+      });
+    }
+
+
+    public void Disconnect()
+    {
+      _shouldReconnect = false;
+      _mqttClient?.DisconnectAsync();
+      Debug.WriteLine("[Wireless] Disconnect called.");
+    }
 
     public void Send(string message)
     {
-      Log($"Send called with message: {message}");
       if (IsConnected)
       {
+        Debug.WriteLine($"[Wireless] Publishing: {message}");
         _mqttClient.PublishAsync(new MqttApplicationMessageBuilder()
-            .WithTopic(_commandTopic) // Send commands to the command topic
+            .WithTopic(_commandTopic)
             .WithPayload(message)
             .Build());
-        Log($"Published to {_commandTopic}: {message}");
       }
       else
       {
-        Log("Failed to send data: Not connected to MQTT broker.");
+        Debug.WriteLine("[Wireless] Cannot Send(), not connected.");
       }
     }
 
     public string Receive()
     {
-      //Log("MQTT communication uses an event-based model. Callbacks handle message reception.");
-      return _lastmessageReceived; // MQTT does not support synchronous receive
+      return null;
     }
 
     public List<DataPoint> DequeueAllData()
     {
-      var dataList = new List<DataPoint>();
-      while (_dataQueue.TryDequeue(out var data))
+      var list = new List<DataPoint>();
+      while (_dataQueue.TryDequeue(out var point))
       {
-        dataList.Add(data);
+        list.Add(point);
       }
-      return dataList;
+      return list;
     }
 
-    private async Task OnConnectedAsync(MqttClientConnectedEventArgs e)
+    public void InitializeMode()
     {
-        try
-        {
-            Log("Connected to MQTT broker. Subscribing to topics...");
-
-            // Subscribe to topics
-            await _mqttClient.SubscribeAsync(new MqttTopicFilterBuilder().WithTopic(_commandTopic).Build());
-            await _mqttClient.SubscribeAsync(new MqttTopicFilterBuilder().WithTopic(_dataTopic).Build());
-            await _mqttClient.SubscribeAsync(new MqttTopicFilterBuilder().WithTopic(_statusTopic).Build());
-
-            Log($"Subscribed to topics: {_commandTopic}, {_dataTopic}, {_statusTopic}");
-    ;
-        }
-        catch (Exception ex)
-        {
-            Log($"Error in OnConnectedAsync: {ex.Message}");
-        }
+      Debug.WriteLine("[Wireless] InitializeMode() called (noop).");
+      // No-op. Connection already started.
     }
 
-    private Task OnDisconnectedAsync(MqttClientDisconnectedEventArgs e)
-    {
-      Log($"Disconnected from the MQTT broker. Reason: {e.Exception?.Message}");
-      return Task.CompletedTask;
-    }
-
-    private Task OnMessageReceivedAsync(MqttApplicationMessageReceivedEventArgs e)
-    {
-      var topic = e.ApplicationMessage.Topic;
-      byte[] payload = e.ApplicationMessage.Payload.ToArray();  //  Extract binary payload
-      string jsonmessage = Encoding.UTF8.GetString(payload);
-      if (topic == _statusTopic)
-      {
-          ProcessLiDARData(jsonmessage);  //  Process commands      
-      }
-      if (topic == _dataTopic)
-      {
-        if (!Utility.IsUtf8String(payload, out string message)) //  Detect binary payload
-        {
-          //Debug.WriteLine("Received Binary LiDAR Data via MQTT");
-          Utility.ProcessLidarBatchBinary(payload, _dataQueue);  //  Process binary data
-        }
-        else
-        {        
-          _lastmessageReceived = jsonmessage;
-          //Debug.WriteLine($"Received JSON/Text Data via MQTT: {jsonmessage}");
-          //Utility.ProcessLidarBatchJson(jsonmessage, _dataQueue);  //  Process JSON LiDAR data       
-        }
-      }
-      return Task.CompletedTask;
-    }
-
-
-
-    private void ProcessLiDARData(string data)
-    {
-      try
-      {
-        if (data.Contains("Status"))
-        {
-          OnMessageReceived?.Invoke($"MQTT: {data}");
-          //Log(data);
-          return;
-        }
-        if (data.Contains("State"))
-        {
-          UpdateState(data);
-          return;
-        }
-        if (data.Contains("VMDPE"))
-        {
-          Log($"Ignoring diagnostic data: {data}");
-          return;
-        }
-        if (!IsValidLiDARData(data))
-        {
-          Log($"Invalid data format: {data}");
-          return;
-        }
-        if (_state == LiDARState.PAUSED)
-        {
-          return;
-        }
-        else
-        {
-          Log($"Invalid data format: {data}");
-        }
-      }
-      catch (Exception ex)
-      {
-        Log($"Error in ProcessSerialData: {ex.Message}");
-      }
-    }
-    private void UpdateState(string msg)
-    {
-      if (msg.Contains("IDLE"))
-      {
-        _state = LiDARState.IDLE;
-      }
-      else if (msg.Contains("RUNNING"))
-      {
-        _state = LiDARState.RUNNING;
-      }
-      else if (msg.Contains("PAUSED"))
-      {
-        _state = LiDARState.PAUSED;
-      }
-
-      Log($"Updated State: {_state}");
-      return;
-    }
-
-    private bool IsValidLiDARData(string data)
-    {
-      return data.Count(c => c == ',') == 2 &&
-             char.IsDigit(data[0]);
-    }
     public void Dispose()
     {
       try
       {
-        if (_mqttClient != null)
-        {
-          if (_mqttClient.IsConnected)
-          {
-            _mqttClient.DisconnectAsync().Wait(); // Ensure proper disconnection
-            Debug.WriteLine("[Wireless] MQTT client disconnected in Dispose().");
-          }
-
-          _mqttClient.Dispose();
-          _mqttClient = null;
-          Debug.WriteLine("[Wireless] MQTT client disposed.");
-        }
+        _shouldReconnect = false;
+        _mqttClient?.Dispose();
+        Debug.WriteLine("[Wireless] Disposed.");
       }
       catch (Exception ex)
       {
         Debug.WriteLine($"[Wireless] Error during Dispose(): {ex.Message}");
       }
-    }
-
-    void SendKeepAliveSignal()
-    {
-      if (IsConnected)
-      {
-        _mqttClient.PublishAsync(new MqttApplicationMessageBuilder()
-            .WithTopic(_statusTopic) // Send commands to the command topic
-            .WithPayload("keepAlive")
-            .Build());
-      }
-    }
-
-    private void ProcessCommand(string command)
-    {
-      if (command == "IDLE")
-      {
-        _state = LiDARState.IDLE;
-      }
-      else if (command == "RUNNING")
-      {
-        _state = LiDARState.RUNNING;
-      }
-      else if (command == "PAUSED")
-      {
-        _state = LiDARState.PAUSED;
-      }
-      else
-      {
-        Log($"Unknown command received: {command}");
-        return;
-      }
-
-      Log($"Updated State: {_state}");
     }
   }
 }

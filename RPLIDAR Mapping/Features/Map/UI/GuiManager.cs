@@ -36,6 +36,7 @@ public class GuiManager
   private int ScreenWidth;
   private int ScreenHeight;
   private bool _showLidarSettings = false;
+  private DateTime? _connectionAttemptStartTime = null;
 
   public GuiManager(Mapplication mainapp)  {
     _MainApplication = mainapp;    
@@ -129,17 +130,50 @@ public class GuiManager
   {
     _guiRenderer.BeginLayout(gametime);
 
-    if (_showLogWindow )
+    if (_showLogWindow)
     {
-      if (Device.IsInitialized) DrawMainWindow();
+      if (Device.IsInitialized)
+      {
+        DrawMainWindow();
+      }
       else
       {
-        _showLidarSettings = true;
-        DrawLidarSettingsWindow();
+        // 🆕 New logic
+        if (_connectionAttemptStartTime == null)
+        {
+          _connectionAttemptStartTime = DateTime.Now;
+        }
+
+        TimeSpan elapsed = DateTime.Now - _connectionAttemptStartTime.Value;
+
+        if (elapsed.TotalSeconds < 30)
+        {
+          DrawConnectingWindow();
+        }
+        else
+        {
+          _showLidarSettings = true;
+          DrawLidarSettingsWindow();
+        }
       }
     }
+
     _guiRenderer.EndLayout();
   }
+  private void DrawConnectingWindow()
+  {
+    ImGui.Begin("Connecting...", ImGuiWindowFlags.AlwaysAutoResize | ImGuiWindowFlags.NoResize | ImGuiWindowFlags.NoMove);
+    ImGui.Text("Connecting to device...");
+    ImGui.Text("Waiting for MQTT connection...");
+    ImGui.Spacing();
+    ImGui.Text($"Elapsed time: {(DateTime.Now - _connectionAttemptStartTime.Value).Seconds} seconds");
+    ImGui.Spacing();
+    ImGui.Text("If this takes longer than 30s, connection settings will be shown.");
+    ImGui.End();
+  }
+
+
+
   private void DrawMainWindow()
   {
     ImGui.SetNextWindowPos(
@@ -187,8 +221,10 @@ public class GuiManager
     int minPointQuality = _map._minPointQuality;
     int MinTileBufferSizeToAdd = _map.MinTileBufferSizeToAdd;
     bool drawSightlines = UtilityProvider.MapRenderer.DrawSightLines;
+    bool drawTiles = UtilityProvider.MapRenderer.DrawTilesToMap;
+    bool drawRingTiles = UtilityProvider.MapRenderer.DrawRingTilesToMap;
 
-    if (ImGui.SliderFloat("Grid Scale", ref gridScaleFactor, 0.1f, 8.0f, "%.2f"))
+    if (ImGui.SliderFloat("Mapa Scale", ref gridScaleFactor, 0.1f, 8.0f, "%.2f"))
     {
       MapScaleManager.Instance.SetScaleFactor(gridScaleFactor);
       _MainApplication.MapUpdated = true;
@@ -211,6 +247,14 @@ public class GuiManager
     if (ImGui.Checkbox("Draw sightlines", ref drawSightlines))
     {
       UtilityProvider.MapRenderer.DrawSightLines = drawSightlines;
+    }
+    if (ImGui.Checkbox("Draw raw tiles", ref drawTiles))
+    {
+      UtilityProvider.MapRenderer.DrawTilesToMap = drawTiles;
+    }
+    if (ImGui.Checkbox("Draw ring tiles", ref drawRingTiles))
+    {
+      UtilityProvider.MapRenderer.DrawRingTilesToMap = drawRingTiles;
     }
     //  Begin Tabs
     if (ImGui.BeginTabBar("MainTabs"))
@@ -336,6 +380,7 @@ public class GuiManager
     int MinLargeFeaturesLineLength = _tileMerge.MinLargeFeaturesLineLength;
     int minTileClusterSize = _tileMerge.MinTileClusterSize;
     int mergeTileRadius = _tileMerge.mergeTileRadius;
+    int mergeClusterRadius = _tileMerge.mergeClusterRadius;
 
     //  Sliders allow manual adjustments (values are updated in TileTrustRegulator)
     if (ImGui.Checkbox("Compute merged points", ref computeMerged))
@@ -367,8 +412,10 @@ public class GuiManager
       _tileMerge.DrawMergedLines = drawMergedLines;
     }
     ImGui.EndDisabled();
-    if (ImGui.SliderInt("Point Cluster Merge Radius", ref mergeTileRadius, 0, 50))
+    if (ImGui.SliderInt("Tile merge radius (tiles)", ref mergeTileRadius, 0, 50))
       _tileMerge.mergeTileRadius = mergeTileRadius; ;
+    if (ImGui.SliderInt("Cluster merge radius (tiles)", ref mergeClusterRadius, 0, 100))
+      _tileMerge.mergeClusterRadius = mergeClusterRadius; ;
     if (ImGui.SliderInt("Minimum merged tile cluster size", ref minTileClusterSize, 2, 100))
     {
       _tileMerge.MinTileClusterSize = minTileClusterSize;

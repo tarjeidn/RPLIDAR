@@ -4,8 +4,10 @@ using RPLIDAR_Mapping.Features.Map.Algorithms;
 using RPLIDAR_Mapping.Features.Map.GridModel;
 using RPLIDAR_Mapping.Providers;
 using RPLIDAR_Mapping.Utilities;
+
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -28,6 +30,21 @@ namespace RPLIDAR_Mapping.Models
     public float ExpectedDistance { get; private set; }
     public List<(float Angle, float Distance)> Observations = new();
     Dictionary<TileCluster, Vector2> clusterToDeviceVector = new();
+    public Vector2 BoundsCenter { get; private set; }
+    public Vector2 BoundsSize { get; private set; }
+    public float BoundsRotation { get; private set; } // In radians
+
+    private Vector2 SmoothedCenter;
+    private float SmoothedRotation;
+    private Vector2 SmoothedSize;
+
+    private const int MinStableFrames = 3;
+    private const int MinTilesToDraw = 5;
+    private const float SmoothingFactor = 0.95f; // 0 = instant, 1 = no smoothing
+    private Vector2 SmoothedVelocity = Vector2.Zero;
+    private const float VelocitySmoothing = 0.1f;
+
+    private const float StabilityThreshold = 100f;
     public struct ClusterAngleRange
     {
       public TileCluster Cluster;
@@ -39,6 +56,9 @@ namespace RPLIDAR_Mapping.Models
       Tiles = new HashSet<Tile>();
       Bounds = Rectangle.Empty;
       Center = Vector2.Zero;
+      SmoothedCenter = Vector2.Zero;
+      SmoothedRotation = 0f;
+      SmoothedSize = Vector2.Zero;
     }
     // ✅ Copy Constructor (Clones another cluster)
     public TileCluster(TileCluster other)
@@ -47,65 +67,267 @@ namespace RPLIDAR_Mapping.Models
       Bounds = other.Bounds; // Copy bounding box
       Center = other.Center; // Copy center position
       FeatureLine = other.FeatureLine;
+      SmoothedCenter = other.SmoothedCenter;
+      SmoothedRotation = other.SmoothedRotation;
+      SmoothedSize = other.SmoothedSize;
     }
-    public void UpdateBoundingBox()
+    public void Update()
     {
-      PreviousCenter = new Vector2(Center.X, Center.Y);
-      ComputeBoundingBox();
-      ComputeClusterCenter();
-      ComputeSightCone();
-      TrustedTilesRatio = TrustedTiles / Tiles.Count;
-      float movementThreshold = 2.0f; // Ignore small movements
-      HasMoved = Vector2.Distance(PreviousCenter, Center) > movementThreshold;
-    }
-    public void UpdateFeatureLine()
-    {
-      ComputeFeatureLine();
-    }
-    public List<ClusterAngleRange> ComputeClusterAngleRanges(Vector2 devicePos, List<TileCluster> clusters)
-    {
-      List<ClusterAngleRange> angleRanges = new();
+      if (Tiles.Count == 0)
+        return;
 
-      foreach (var cluster in clusters)
+      foreach (var tile in Tiles)
       {
-        Rectangle bounds = cluster.Bounds;
-
-        // Get all 4 corners of the bounding rectangle
-        Vector2[] corners = new Vector2[]
-        {
-      new(bounds.Left, bounds.Top),
-      new(bounds.Right, bounds.Top),
-      new(bounds.Right, bounds.Bottom),
-      new(bounds.Left, bounds.Bottom)
-        };
-
-        float min = 999f;
-        float max = -999f;
-
-        foreach (var corner in corners)
-        {
-          Vector2 dir = corner - devicePos;
-          float angle = MathHelper.ToDegrees(MathF.Atan2(dir.Y, dir.X));
-          angle = (angle + 360f) % 360f;
-
-          if (angle < min) min = angle;
-          if (angle > max) max = angle;
-        }
-
-        // Handle wraparound (e.g., from 350° to 10°)
-        if (max - min > 180)
-        {
-          // Invert range: e.g. 350°–10° becomes two ranges: 0–10 and 350–360
-          angleRanges.Add(new ClusterAngleRange { Cluster = cluster, MinAngle = 0, MaxAngle = (int)min });
-          angleRanges.Add(new ClusterAngleRange { Cluster = cluster, MinAngle = (int)max, MaxAngle = 359 });
-        } else
-        {
-          angleRanges.Add(new ClusterAngleRange { Cluster = cluster, MinAngle = (int)min, MaxAngle = (int)max });
-        }
+        tile.FramesInCluster++; 
       }
 
-      return angleRanges;
+      // Select stable tiles
+      var stableTiles = Tiles.Where(t => t.FramesInCluster >= MinStableFrames).ToList();
+
+      if (stableTiles.Count < MinTilesToDraw)
+      {
+        Debug.WriteLine($"⚠️ Cluster Unstable: {stableTiles.Count} stable tiles (needs {MinTilesToDraw})");
+        return; // ❌ Skip center update if unstable
+      }
+
+      Debug.WriteLine($"✅ Cluster Stable: {stableTiles.Count} stable tiles");
+
+      // ✅ Only now update the Center/FeatureLine/bounds
+      UpdateCenter(stableTiles);
+      UpdateFeatureLine(stableTiles);
+      UpdateRotatedBoundingBox(stableTiles);
     }
+
+
+
+    //public void UpdateBoundingBox()
+    //{
+    //  PreviousCenter = new Vector2(Center.X, Center.Y);
+    //  //ComputeBoundingBox();
+    //  UpdateRotatedBoundingBox();
+    //  ComputeClusterCenter();
+    //  ComputeSightCone();
+    //  TrustedTilesRatio = TrustedTiles / Tiles.Count;
+    //  float movementThreshold = 2.0f; // Ignore small movements
+    //  HasMoved = Vector2.Distance(PreviousCenter, Center) > movementThreshold;
+    //}
+    //public void UpdateFeatureLine()
+    //{
+    //  ComputeFeatureLine();
+    //}
+
+    private void UpdateCenter(List<Tile> stableTiles)
+    {
+      int count = stableTiles.Count;
+      if (count == 0)
+        return;
+
+      var sortedX = stableTiles.OrderBy(t => t.GlobalCenter.X).ToList();
+      var sortedY = stableTiles.OrderBy(t => t.GlobalCenter.Y).ToList();
+
+      float medianX = sortedX[count / 2].GlobalCenter.X;
+      float medianY = sortedY[count / 2].GlobalCenter.Y;
+
+      Vector2 computedCenter = new Vector2(medianX, medianY);
+
+      if (SmoothedCenter == Vector2.Zero)
+      {
+        SmoothedCenter = computedCenter;
+      }
+      else
+      {
+        Vector2 delta = computedCenter - SmoothedCenter;
+        float deltaLength = delta.Length();
+
+        // 🔥 Adaptive smoothing:
+        float dynamicSmoothingFactor = MathHelper.Clamp(1f - (deltaLength / 50f), 0.05f, 0.95f);
+
+        SmoothedCenter = Vector2.Lerp(SmoothedCenter, computedCenter, dynamicSmoothingFactor);
+      }
+
+      Center = SmoothedCenter;
+    }
+
+    private void UpdateFeatureLine(List<Tile> stableTiles)
+    {
+      if (stableTiles.Count < 2)
+        return;
+
+      List<Vector2> points = stableTiles.Select(t => t.GlobalCenter).ToList();
+      (Vector2 direction, Vector2 centroid) = ComputePCA(points);
+
+      points.Sort((a, b) => Vector2.Dot(a - centroid, direction).CompareTo(Vector2.Dot(b - centroid, direction)));
+
+      Vector2 start = points.First();
+      Vector2 end = points.Last();
+
+      float angleRadians = MathF.Atan2(end.Y - start.Y, end.X - start.X);
+
+      FeatureLine = new LineSegment(start, end, MathHelper.ToDegrees(angleRadians), angleRadians, false, this);
+    }
+
+    private void UpdateRotatedBoundingBox(List<Tile> stableTiles)
+    {
+      if (FeatureLine == null || stableTiles.Count == 0)
+        return;
+
+      float targetRotation = FeatureLine.AngleRadians;
+      Vector2 centroid = Center;
+
+      List<Vector2> rotatedPoints = new();
+      foreach (var tile in stableTiles)
+      {
+        Vector2 relative = tile.GlobalCenter - centroid;
+        float rotatedX = relative.X * MathF.Cos(-targetRotation) - relative.Y * MathF.Sin(-targetRotation);
+        float rotatedY = relative.X * MathF.Sin(-targetRotation) + relative.Y * MathF.Cos(-targetRotation);
+        rotatedPoints.Add(new Vector2(rotatedX, rotatedY));
+      }
+
+      float minX = rotatedPoints.Min(p => p.X);
+      float maxX = rotatedPoints.Max(p => p.X);
+      float minY = rotatedPoints.Min(p => p.Y);
+      float maxY = rotatedPoints.Max(p => p.Y);
+
+      Vector2 computedSize = new Vector2(maxX - minX, maxY - minY);
+
+      // --- 🔥 Anti-shrink protection ---
+      if (SmoothedSize != Vector2.Zero)
+      {
+        if (computedSize.X < SmoothedSize.X * 0.8f)
+          computedSize.X = SmoothedSize.X * 0.8f;
+        if (computedSize.Y < SmoothedSize.Y * 0.8f)
+          computedSize.Y = SmoothedSize.Y * 0.8f;
+      }
+
+      // --- 🔥 Adaptive smoothing ---
+      if (SmoothedSize == Vector2.Zero || float.IsNaN(SmoothedSize.X) || float.IsNaN(SmoothedSize.Y))
+        SmoothedSize = computedSize;
+      else
+      {
+        float sizeDelta = Vector2.Distance(SmoothedSize, computedSize);
+        float sizeSmoothingFactor = MathHelper.Clamp(1f - (sizeDelta / 50f), 0.05f, 0.95f);
+
+        SmoothedSize = Vector2.Lerp(SmoothedSize, computedSize, sizeSmoothingFactor);
+      }
+
+      if (float.IsNaN(SmoothedRotation) || SmoothedRotation == 0f)
+        SmoothedRotation = targetRotation;
+      else
+      {
+        float angleDelta = MathF.Abs(MathHelper.WrapAngle(SmoothedRotation - targetRotation));
+        float rotationSmoothingFactor = MathHelper.Clamp(1f - (angleDelta / MathHelper.PiOver4), 0.05f, 0.95f);
+
+        SmoothedRotation = MathHelper.Lerp(SmoothedRotation, targetRotation, rotationSmoothingFactor);
+      }
+
+      BoundsCenter = SmoothedCenter;
+      BoundsSize = SmoothedSize;
+      BoundsRotation = SmoothedRotation;
+    }
+
+
+
+    private (Vector2 Direction, Vector2 Centroid) ComputePCA(List<Vector2> points)
+    {
+      if (points.Count < 2)
+        return (Vector2.UnitX, points[0]);
+
+      Vector2 centroid = new Vector2(points.Average(p => p.X), points.Average(p => p.Y));
+      float sumXX = 0, sumXY = 0, sumYY = 0;
+
+      foreach (var p in points)
+      {
+        float dx = p.X - centroid.X;
+        float dy = p.Y - centroid.Y;
+        sumXX += dx * dx;
+        sumXY += dx * dy;
+        sumYY += dy * dy;
+      }
+
+      float trace = sumXX + sumYY;
+      float determinant = (sumXX * sumYY) - (sumXY * sumXY);
+      float eigenvalue = (trace + MathF.Sqrt(trace * trace - 4 * determinant)) / 2;
+
+      Vector2 direction = new Vector2(sumXY, eigenvalue - sumXX);
+      direction.Normalize();
+
+      return (direction, centroid);
+    }
+
+    /// ///////////////
+
+    //public void UpdateRotatedBoundingBox()
+    //{
+    //  if (FeatureLine == null || stableTiles.Count < 3)
+    //    return; // ❌ Not enough tiles to update bounds reliably
+    //  float rotation = FeatureLine.AngleRadians; // Use the feature line orientation
+    //  Vector2 centroid = Center; // Use cluster center (already computed)
+
+    //  List<Vector2> rotatedPoints = new();
+
+    //  foreach (var tile in Tiles)
+    //  {
+    //    Vector2 relative = tile.GlobalCenter - centroid;
+    //    float rotatedX = relative.X * MathF.Cos(-rotation) - relative.Y * MathF.Sin(-rotation);
+    //    float rotatedY = relative.X * MathF.Sin(-rotation) + relative.Y * MathF.Cos(-rotation);
+    //    rotatedPoints.Add(new Vector2(rotatedX, rotatedY));
+    //  }
+
+    //  float minX = rotatedPoints.Min(p => p.X);
+    //  float maxX = rotatedPoints.Max(p => p.X);
+    //  float minY = rotatedPoints.Min(p => p.Y);
+    //  float maxY = rotatedPoints.Max(p => p.Y);
+
+    //  BoundsCenter = centroid;
+    //  BoundsSize = new Vector2(maxX - minX, maxY - minY);
+    //  BoundsRotation = rotation;
+
+    //  // Optional: store corners too if you want for faster drawing
+    //}
+    //public List<ClusterAngleRange> ComputeClusterAngleRanges(Vector2 devicePos, List<TileCluster> clusters)
+    //{
+    //  List<ClusterAngleRange> angleRanges = new();
+
+    //  foreach (var cluster in clusters)
+    //  {
+    //    Rectangle bounds = cluster.Bounds;
+
+    //    // Get all 4 corners of the bounding rectangle
+    //    Vector2[] corners = new Vector2[]
+    //    {
+    //  new(bounds.Left, bounds.Top),
+    //  new(bounds.Right, bounds.Top),
+    //  new(bounds.Right, bounds.Bottom),
+    //  new(bounds.Left, bounds.Bottom)
+    //    };
+
+    //    float min = 999f;
+    //    float max = -999f;
+
+    //    foreach (var corner in corners)
+    //    {
+    //      Vector2 dir = corner - devicePos;
+    //      float angle = MathHelper.ToDegrees(MathF.Atan2(dir.Y, dir.X));
+    //      angle = (angle + 360f) % 360f;
+
+    //      if (angle < min) min = angle;
+    //      if (angle > max) max = angle;
+    //    }
+
+    //    // Handle wraparound (e.g., from 350° to 10°)
+    //    if (max - min > 180)
+    //    {
+    //      // Invert range: e.g. 350°–10° becomes two ranges: 0–10 and 350–360
+    //      angleRanges.Add(new ClusterAngleRange { Cluster = cluster, MinAngle = 0, MaxAngle = (int)min });
+    //      angleRanges.Add(new ClusterAngleRange { Cluster = cluster, MinAngle = (int)max, MaxAngle = 359 });
+    //    } else
+    //    {
+    //      angleRanges.Add(new ClusterAngleRange { Cluster = cluster, MinAngle = (int)min, MaxAngle = (int)max });
+    //    }
+    //  }
+
+    //  return angleRanges;
+    //}
 
 
     /// <summary>
@@ -114,7 +336,7 @@ namespace RPLIDAR_Mapping.Models
     public void AddTile(Tile tile)
     {
       if (!Tiles.Add(tile)) return; // Avoid duplicate tiles
-
+      tile.FramesInCluster = 0;
       // Update bounds
       if (Tiles.Count == 1)
       {
@@ -178,8 +400,9 @@ namespace RPLIDAR_Mapping.Models
 
       foreach (Tile tile in other.Tiles)
       {
-        AddTile(tile);
+        Tiles.Add(tile);
         tile.Cluster = this;
+        tile.FramesInCluster = 0;
       }
 
       MergedFrom.Add(other);
@@ -320,36 +543,36 @@ namespace RPLIDAR_Mapping.Models
 
       FeatureLine = new LineSegment(start, end, angleDegrees, angleRadians, false, this);
     }
-    private (Vector2 Direction, Vector2 Centroid) ComputePCA(List<Vector2> points)
-    {
-      if (points.Count < 2) return (Vector2.UnitX, points[0]); // Default if not enough points
+    //private (Vector2 Direction, Vector2 Centroid) ComputePCA(List<Vector2> points)
+    //{
+    //  if (points.Count < 2) return (Vector2.UnitX, points[0]); // Default if not enough points
 
-      // Compute centroid
-      Vector2 centroid = new Vector2(points.Average(p => p.X), points.Average(p => p.Y));
+    //  // Compute centroid
+    //  Vector2 centroid = new Vector2(points.Average(p => p.X), points.Average(p => p.Y));
 
-      // Compute covariance matrix
-      float sumXX = 0, sumXY = 0, sumYY = 0;
-      foreach (var p in points)
-      {
-        float dx = p.X - centroid.X;
-        float dy = p.Y - centroid.Y;
-        sumXX += dx * dx;
-        sumXY += dx * dy;
-        sumYY += dy * dy;
-      }
+    //  // Compute covariance matrix
+    //  float sumXX = 0, sumXY = 0, sumYY = 0;
+    //  foreach (var p in points)
+    //  {
+    //    float dx = p.X - centroid.X;
+    //    float dy = p.Y - centroid.Y;
+    //    sumXX += dx * dx;
+    //    sumXY += dx * dy;
+    //    sumYY += dy * dy;
+    //  }
 
-      // Solve for the eigenvector of the dominant eigenvalue
-      float trace = sumXX + sumYY;
-      float determinant = (sumXX * sumYY) - (sumXY * sumXY);
-      float eigenvalue = (trace + MathF.Sqrt(trace * trace - 4 * determinant)) / 2;
+    //  // Solve for the eigenvector of the dominant eigenvalue
+    //  float trace = sumXX + sumYY;
+    //  float determinant = (sumXX * sumYY) - (sumXY * sumXY);
+    //  float eigenvalue = (trace + MathF.Sqrt(trace * trace - 4 * determinant)) / 2;
 
-      Vector2 direction = new Vector2(sumXY, eigenvalue - sumXX);
-      direction.Normalize();
+    //  Vector2 direction = new Vector2(sumXY, eigenvalue - sumXX);
+    //  direction.Normalize();
 
-      return (direction, centroid);
-    }
+    //  return (direction, centroid);
+    //}
 
-    public List<TileCluster> SplitDisconnectedClusters(float maxDistance)
+    public List<TileCluster> SplitDisconnectedClusters()
     {
       List<TileCluster> newClusters = new();
       HashSet<Tile> unvisited = new(Tiles);
@@ -361,18 +584,19 @@ namespace RPLIDAR_Mapping.Models
         queue.Enqueue(start);
 
         TileCluster cluster = new TileCluster();
-        cluster.AddTile(start);
+        cluster.Tiles.Add(start);
         unvisited.Remove(start);
 
         while (queue.Count > 0)
         {
           Tile current = queue.Dequeue();
 
-          foreach (Tile neighbor in AlgorithmProvider.TileMerge.GetConnectedNeighbors(current, maxDistance))
+          foreach (Tile neighbor in current.GetNeighbors())
           {
             if (unvisited.Contains(neighbor))
             {
-              cluster.AddTile(neighbor);
+
+              cluster.Tiles.Add(neighbor);
               queue.Enqueue(neighbor);
               unvisited.Remove(neighbor);
             }
@@ -384,6 +608,7 @@ namespace RPLIDAR_Mapping.Models
 
       return newClusters;
     }
+
 
 
   }

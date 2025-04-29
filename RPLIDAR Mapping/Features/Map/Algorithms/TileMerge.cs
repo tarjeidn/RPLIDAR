@@ -33,14 +33,16 @@ namespace RPLIDAR_Mapping.Features.Map.Algorithms
     public Map _map { get; set; }
     public int MergeFrequency = 20;
     public int MinMergedTileSize = 50;
-    public int mergeTileRadius = 3;
+    public int mergeTileRadius = 10;
+    public int mergeClusterRadius = 2;
+    
     public int MinTileClusterSize = 10;
     public int MinLargeFeaturesLineLength = 100;
     public float TileMergeThreshold = 50;
     public bool ComputeMergedTiles = true;
     public bool ComputeMergedLines = true;
-    public bool ComputeMergedRectangles = false;
-    public bool DrawMergedTiles = false;
+    public bool ComputeMergedRectangles = true;
+    public bool DrawMergedTiles = true;
     public bool DrawMergedLines = true;
     private int MergeTilesFrameCounter = 0;
     public float PointClusterMergeDistance = 200f;
@@ -50,13 +52,16 @@ namespace RPLIDAR_Mapping.Features.Map.Algorithms
     public bool IsUpdated = false;
     private bool TilesMerged = false;
     public bool LinesDetected = false;
-
+    private int SplitClusterFrequency = 50;
+    private int framesSinceLastSplit = 0;
     private HashSet<Tile> _trustedTiles;
     private Dictionary<Vector2, HashSet<Tile>> clusterLookup = new();
 
     private Dictionary<(int, int), Tile> TileLookup = new();
     private List<Vector2> _previousClusterCenters = new();
     public Vector2 _estimatedPosition { get; private set; } = Vector2.Zero;
+    private Dictionary<(int, int), List<Tile>> tileSpatialLookup = new();
+    private const int SpatialCellSize = 100; // 100mm grid cells 
 
     public Device _device { get; set; }
     public MergeState CurrentState { get; set; } = MergeState.Idle;
@@ -64,6 +69,7 @@ namespace RPLIDAR_Mapping.Features.Map.Algorithms
     {
       Idle,              // Waiting, nothing computed yet
       NewPointsAdded,
+      LinkNeighbourTiles,
       ClusteringTiles,    // Merging tiles
       MergingClusters,
       UpdatingClusters,
@@ -74,7 +80,7 @@ namespace RPLIDAR_Mapping.Features.Map.Algorithms
       ReadyToDraw        // All computations complete, ready to render
     }
 
-    public TileMerge() 
+    public TileMerge()
     {
 
 
@@ -83,78 +89,221 @@ namespace RPLIDAR_Mapping.Features.Map.Algorithms
     public bool Update()
     {
       IsUpdated = false;
+      bool ClustersChanged = false;
       _tileSize = 10;
+
       switch (CurrentState)
       {
         case MergeState.Idle:
-
           break;
+
         case MergeState.NewPointsAdded:
           _previousClusterCenters = TileClusters
-          //.Where(c => c.Tiles.Count >= 10) // ignore tiny clusters
-          .Select(c => c.Center)
-          .ToList();
-          CurrentState = ComputeMergedLines ? MergeState.ClusteringTiles : MergeState.ReadyToDraw;
+              .Where(c => c.Tiles.Count >= 10)
+              .Select(c => c.Center)
+              .ToList();
+          CurrentState = MergeState.LinkNeighbourTiles;
+          break;
+
+        case MergeState.LinkNeighbourTiles:
+          LinkNearestNeighborsByProximity(_map.NewTiles.ToList());
+          CurrentState = MergeState.ClusteringTiles;
           break;
 
         case MergeState.ClusteringTiles:
-          // Merge trusted tiles into clusters
-          ClusterTrustedTiles(_map.NewTiles);
-          CurrentState = ComputeMergedLines ? MergeState.MergingClusters : MergeState.ReadyToDraw;
+          if (_map.NewTiles.Count > 0)
+          {
+            ClusterTrustedTiles(_map.NewTiles);
+            _map.NewTiles.Clear();
+            ClustersChanged = true; // ✅ New points -> clusters changed
+          }
+          CurrentState = MergeState.MergingClusters;
           break;
 
         case MergeState.MergingClusters:
-          // Merge clusters
-          int maxSearchDistance = mergeTileRadius * _tileSize;
-          FastMergeOverlappingClusters(UpdatedClusters, maxSearchDistance);
-          CurrentState = ComputeMergedLines ? MergeState.ComputingRects : MergeState.ReadyToDraw;
-          break;
-        case MergeState.ComputingRects:
-          // Update clusters
-          foreach (TileCluster cluster in TileClusters)
+          if (ClustersChanged)
           {
-            cluster.UpdateBoundingBox();
+            int maxSearchDistance = mergeClusterRadius * _tileSize;
+            FastMergeOverlappingClusters(UpdatedClusters, maxSearchDistance);
+            ClustersChanged = true; // ✅ Merging -> clusters changed
           }
-
-          CurrentState = ComputeMergedLines ? MergeState.ComputingLines : MergeState.ReadyToDraw;
-          break;
-
-        case MergeState.ComputingLines:
-          // Process line detection from merged tiles
-          foreach (TileCluster cluster in TileClusters)
-          {
-            cluster.UpdateFeatureLine();
-          }
-          CurrentState = ComputeMergedRectangles ? MergeState.ReadyToDraw : MergeState.ReadyToDraw;
+          CurrentState = MergeState.SplittingClusters;
           break;
 
         case MergeState.SplittingClusters:
+          if (ClustersChanged && framesSinceLastSplit >= SplitClusterFrequency)
           {
-
             SplitClusters();
-            CurrentState = MergeState.ComputeClusterShift;
-            break;
+            framesSinceLastSplit = 0;
+            ClustersChanged = true; // ✅ Splitting -> clusters changed
           }
-        case MergeState.ComputeClusterShift:
+          else framesSinceLastSplit++;
+          CurrentState = MergeState.ComputingRects;
+          break;
+
+        case MergeState.ComputingRects:
+          foreach (TileCluster cluster in TileClusters)
           {
-
-            ComputeClusterShift();
-            CurrentState = MergeState.ReadyToDraw;
-            break;
+            cluster.Update();
+            cluster.ComputeSightWindow(UtilityProvider.Device._devicePosition);
           }
+          ClustersChanged = false; // ✅ Reset after updating
+          CurrentState = MergeState.ComputeClusterShift;
+          break;
 
+        case MergeState.ComputeClusterShift:
+          ComputeClusterShift();
+          CurrentState = MergeState.ReadyToDraw;
+          break;
 
         case MergeState.ReadyToDraw:
-          // Computation is complete; tiles and lines are ready for rendering.
-          // Reset state when ComputeMergedTiles is disabled
           CurrentState = MergeState.Idle;
-          IsUpdated = true;          
+          IsUpdated = true;
           break;
       }
 
       return IsUpdated;
     }
 
+    public void LinkNearestNeighborsByProximity(List<Tile> allTiles)
+    {
+      float maxSearchDistance = 100f; // mm
+      float maxSearchDistanceSquared = maxSearchDistance * maxSearchDistance;
+      float coneHalfAngleDegrees = 45f;
+      float cosHalfAngle = MathF.Cos(MathHelper.ToRadians(coneHalfAngleDegrees));
+      BuildSpatialLookup(allTiles);
+
+      foreach (Tile tile in allTiles)
+      {
+        Vector2 origin = tile.GlobalCenter;
+
+        Tile leftBest = null, rightBest = null, topBest = null, bottomBest = null;
+        float leftBestScore = float.MinValue;
+        float rightBestScore = float.MinValue;
+        float topBestScore = float.MinValue;
+        float bottomBestScore = float.MinValue;
+
+        foreach (Tile candidate in GetNearbyTiles(origin))
+        {
+          if (candidate == tile)
+            continue;
+
+          Vector2 toTarget = candidate.GlobalCenter - origin;
+          float distSq = toTarget.LengthSquared();
+          if (distSq > maxSearchDistanceSquared) continue;
+
+          Vector2 dir = Vector2.Normalize(toTarget);
+
+          float dotLeft = Vector2.Dot(dir, new Vector2(-1, 0));
+          float dotRight = Vector2.Dot(dir, new Vector2(1, 0));
+          float dotUp = Vector2.Dot(dir, new Vector2(0, -1));
+          float dotDown = Vector2.Dot(dir, new Vector2(0, 1));
+
+          float inverseDist = 1f / MathF.Sqrt(distSq); // Do sqrt *only* for scoring
+          float scoreLeft = dotLeft * inverseDist;
+          float scoreRight = dotRight * inverseDist;
+          float scoreUp = dotUp * inverseDist;
+          float scoreDown = dotDown * inverseDist;
+
+          if (dotLeft > cosHalfAngle && scoreLeft > leftBestScore)
+          {
+            leftBest = candidate;
+            leftBestScore = scoreLeft;
+          }
+          else if (dotRight > cosHalfAngle && scoreRight > rightBestScore)
+          {
+            rightBest = candidate;
+            rightBestScore = scoreRight;
+          }
+          else if (dotUp > cosHalfAngle && scoreUp > topBestScore)
+          {
+            topBest = candidate;
+            topBestScore = scoreUp;
+          }
+          else if (dotDown > cosHalfAngle && scoreDown > bottomBestScore)
+          {
+            bottomBest = candidate;
+            bottomBestScore = scoreDown;
+          }
+        }
+
+        tile.LeftAngularNeighbor = leftBest;
+        tile.RightAngularNeighbor = rightBest;
+        tile.TopAngularNeighbor = topBest;
+        tile.BottomAngularNeighbor = bottomBest;
+      }
+    }
+
+
+
+    private IEnumerable<Tile> GetNearbyTiles(Vector2 position)
+    {
+      var cell = GetSpatialCell(position);
+
+      for (int dx = -1; dx <= 1; dx++)
+      {
+        for (int dy = -1; dy <= 1; dy++)
+        {
+          var neighborCell = (cell.Item1 + dx, cell.Item2 + dy);
+          if (tileSpatialLookup.TryGetValue(neighborCell, out var tilesInCell))
+          {
+            foreach (var tile in tilesInCell)
+              yield return tile;
+          }
+        }
+      }
+    }
+
+
+    public void BuildSpatialLookup(List<Tile> allTiles)
+    {
+      tileSpatialLookup.Clear();
+
+      foreach (var tile in allTiles)
+      {
+        var cell = GetSpatialCell(tile.GlobalCenter);
+        if (!tileSpatialLookup.ContainsKey(cell))
+          tileSpatialLookup[cell] = new List<Tile>();
+        tileSpatialLookup[cell].Add(tile);
+      }
+    }
+
+    private (int, int) GetSpatialCell(Vector2 position)
+    {
+      int x = (int)MathF.Floor(position.X / SpatialCellSize);
+      int y = (int)MathF.Floor(position.Y / SpatialCellSize);
+      return (x, y);
+    }
+    public void MarkClusterEnds(List<Tile> allTiles)
+    {
+      foreach (var tile in allTiles)
+      {
+        int neighborCount = 0;
+        if (tile.LeftAngularNeighbor != null) neighborCount++;
+        if (tile.RightAngularNeighbor != null) neighborCount++;
+        if (tile.TopAngularNeighbor != null) neighborCount++;
+        if (tile.BottomAngularNeighbor != null) neighborCount++;
+
+        tile.IsClusterEnd = (neighborCount == 1);
+        tile.IsClusterIsolated = (neighborCount == 0);
+        tile.IsClusterMiddle = (neighborCount == 2);
+      }
+    }
+
+    private Tile GetNextNeighbor(Tile current, Tile previous)
+    {
+      if (current.LeftAngularNeighbor != null && current.LeftAngularNeighbor != previous)
+        return current.LeftAngularNeighbor;
+      if (current.RightAngularNeighbor != null && current.RightAngularNeighbor != previous)
+        return current.RightAngularNeighbor;
+      if (current.TopAngularNeighbor != null && current.TopAngularNeighbor != previous)
+        return current.TopAngularNeighbor;
+      if (current.BottomAngularNeighbor != null && current.BottomAngularNeighbor != previous)
+        return current.BottomAngularNeighbor;
+      return null;
+    }
+
+    /// ////////////////////////OLD
 
     private void ComputeClusterShift()
     {
@@ -170,28 +319,29 @@ namespace RPLIDAR_Mapping.Features.Map.Algorithms
         float angleDelta = Utility.NormalizeAngle(angleNow - cluster.ExpectedAngle);
         float distDelta = distNow - cluster.ExpectedDistance;
 
-        Debug.WriteLine("🔍 Cluster Shift Check:");
-        Debug.WriteLine($"• Cluster Center        : {cluster.Center}");
-        Debug.WriteLine($"• Device Position       : {devicePos}");
-        Debug.WriteLine($"• Expected Angle        : {MathHelper.ToDegrees(cluster.ExpectedAngle):0.00}°");
-        Debug.WriteLine($"• Current Angle         : {MathHelper.ToDegrees(angleNow):0.00}°");
-        Debug.WriteLine($"• Δ Angle               : {MathHelper.ToDegrees(angleDelta):0.00}°");
-        Debug.WriteLine($"• Expected Distance     : {cluster.ExpectedDistance:0.00}");
-        Debug.WriteLine($"• Current Distance      : {distNow:0.00}");
-        Debug.WriteLine($"• Δ Distance            : {distDelta:0.00}");
-        Debug.WriteLine($"• Allowed Angle Span    : {MathHelper.ToDegrees(cluster.ExpectedSpan / 2f):0.00}°");
-        Debug.WriteLine($"• Max Distance Drift    : {maxDistanceDrift}");
+        //Debug.WriteLine("🔍 Cluster Shift Check:");
+        //Debug.WriteLine($"• Cluster Center        : {cluster.Center}");
+        //Debug.WriteLine($"• Device Position       : {devicePos}");
+        //Debug.WriteLine($"• Expected Angle        : {MathHelper.ToDegrees(cluster.ExpectedAngle):0.00}°");
+        //Debug.WriteLine($"• Current Angle         : {MathHelper.ToDegrees(angleNow):0.00}°");
+        //Debug.WriteLine($"• Δ Angle               : {MathHelper.ToDegrees(angleDelta):0.00}°");
+        //Debug.WriteLine($"• Expected Distance     : {cluster.ExpectedDistance:0.00}");
+        //Debug.WriteLine($"• Current Distance      : {distNow:0.00}");
+        //Debug.WriteLine($"• Δ Distance            : {distDelta:0.00}");
+        //Debug.WriteLine($"• Allowed Angle Span    : {MathHelper.ToDegrees(cluster.ExpectedSpan / 2f):0.00}°");
+        //Debug.WriteLine($"• Max Distance Drift    : {maxDistanceDrift}");
 
-        if (Math.Abs(angleDelta) > cluster.ExpectedSpan / 2f ||
-            Math.Abs(distDelta) > maxDistanceDrift)
-        {
-          Debug.WriteLine("⚠️  Cluster OUTSIDE sight cone — possible movement.");
-        } else
-        {
-          Debug.WriteLine("✅ Cluster within expected view.");
-        }
+        //if (Math.Abs(angleDelta) > cluster.ExpectedSpan / 2f ||
+        //    Math.Abs(distDelta) > maxDistanceDrift)
+        //{
+        //  Debug.WriteLine("⚠️  Cluster OUTSIDE sight cone — possible movement.");
+        //}
+        //else
+        //{
+        //  Debug.WriteLine("✅ Cluster within expected view.");
+        //}
 
-        Debug.WriteLine(""); // Empty line for readability
+        //Debug.WriteLine(""); // Empty line for readability
       }
     }
 
@@ -223,6 +373,7 @@ namespace RPLIDAR_Mapping.Features.Map.Algorithms
       // **Step 2: Assign each tile to an existing cluster before creating a new one**
       foreach (Tile tile in newTiles)
       {
+        if (tile.TrustedScore < AlgorithmProvider.TileTrustRegulator.TrustThreshold) continue;
         if (!visited.Add(tile)) continue;
 
         // **Find the nearest cluster within search distance**
@@ -232,7 +383,8 @@ namespace RPLIDAR_Mapping.Features.Map.Algorithms
           nearestCluster.AddTile(tile);
           tile.Cluster = nearestCluster;
           updatedClusters.Add(nearestCluster);
-        } else
+        }
+        else
         {
           // **Create a new cluster only if no nearby cluster is found**
           TileCluster newCluster = new TileCluster();
@@ -254,19 +406,21 @@ namespace RPLIDAR_Mapping.Features.Map.Algorithms
 
       foreach (var cluster in TileClusters)
       {
-        // Find the closest point on the cluster's bounding box
-        Vector2 closestPoint = GetClosestPointOnBounds(tile.GlobalCenter, cluster.Bounds);
-        float distance = Vector2.Distance(tile.GlobalCenter, closestPoint);
-
-        if (distance < bestDistance)
+        foreach (var clusterTile in cluster.Tiles)
         {
-          bestCluster = cluster;
-          bestDistance = distance;
+          float distance = Vector2.Distance(tile.GlobalCenter, clusterTile.GlobalCenter);
+
+          if (distance < bestDistance)
+          {
+            bestDistance = distance;
+            bestCluster = cluster;
+          }
         }
       }
 
       return bestCluster;
     }
+
     private Vector2 GetClosestPointOnBounds(Vector2 point, Rectangle bounds)
     {
       float closestX = Math.Clamp(point.X, bounds.Left, bounds.Right);
@@ -283,7 +437,8 @@ namespace RPLIDAR_Mapping.Features.Map.Algorithms
       {
         foreach (var otherCluster in TileClusters)
         {
-          if (cluster == otherCluster || toRemove.Contains(otherCluster)) continue;
+          if (cluster == otherCluster || toRemove.Contains(otherCluster))
+            continue;
 
           if (ClustersAreClose(cluster, otherCluster, maxDistance))
           {
@@ -295,6 +450,7 @@ namespace RPLIDAR_Mapping.Features.Map.Algorithms
 
       TileClusters.RemoveAll(c => toRemove.Contains(c));
     }
+
     private void SplitClusters()
     {
       int maxSearchDistance = mergeTileRadius * _tileSize;
@@ -303,7 +459,7 @@ namespace RPLIDAR_Mapping.Features.Map.Algorithms
 
       foreach (var cluster in TileClusters)
       {
-        var split = cluster.SplitDisconnectedClusters(maxSearchDistance);
+        var split = cluster.SplitDisconnectedClusters();
 
         if (split.Count > 1)
         {
@@ -325,19 +481,26 @@ namespace RPLIDAR_Mapping.Features.Map.Algorithms
 
     private bool ClustersAreClose(TileCluster clusterA, TileCluster clusterB, float maxDistance)
     {
-      // 🔥 First quick check: If bounding boxes are already overlapping
-      if (clusterA.Bounds.Intersects(clusterB.Bounds))
-        return true; // Already touching
+      // 🔥 First quick check: if centers are way too far apart, skip
+      float centerDistSq = Vector2.DistanceSquared(clusterA.Center, clusterB.Center);
+      float maxMergeDistSq = (maxDistance * 2f) * (maxDistance * 2f); // extra margin
+      if (centerDistSq > maxMergeDistSq)
+        return false;
 
-      // 🔥 Find closest points on each cluster's bounding box
+      // 🔥 Fast bounding box intersection check
+      if (clusterA.Bounds.Intersects(clusterB.Bounds))
+        return true;
+
+      // 🔥 Slower closest-point check
       Vector2 closestPointA = GetClosestPointOnBounds(clusterA.Center, clusterB.Bounds);
       Vector2 closestPointB = GetClosestPointOnBounds(clusterB.Center, clusterA.Bounds);
 
-      // 🔥 Measure the actual distance
       float actualDistance = Vector2.Distance(closestPointA, closestPointB);
 
       return actualDistance <= maxDistance;
     }
+
+
     public List<Tile> GetConnectedNeighbors(Tile tile, float connectionDistance = 15f)
     {
       List<Tile> neighbors = new();
@@ -400,145 +563,6 @@ namespace RPLIDAR_Mapping.Features.Map.Algorithms
       return false;
     }
 
-
-    //private void ComputeDeviceMovement(List<(Vector2 Start, Vector2 End, float Angle, bool IsPermanent)> oldLines,
-    //                               List<(Vector2 Start, Vector2 End, float Angle, bool IsPermanent)> newLines)
-    //{
-    //  if (oldLines.Count == 0 || newLines.Count == 0)
-    //  {
-    //    Debug.WriteLine("ComputeDeviceMovement: No lines to compare.");
-    //    return;
-    //  }
-
-    //  List<Vector2> shifts = new();
-    //  List<float> angleChanges = new();
-
-    //  int comparisonCount = Math.Min(oldLines.Count, newLines.Count);
-    //  Debug.WriteLine($"Comparing {comparisonCount} old lines with {newLines.Count} new lines.");
-
-    //  for (int i = 0; i < comparisonCount; i++)
-    //  {
-    //    var oldLine = oldLines[i];
-    //    var newLine = newLines[i];
-
-    //    Vector2 oldMidpoint = (oldLine.Start + oldLine.End) / 2;
-    //    Vector2 newMidpoint = (newLine.Start + newLine.End) / 2;
-
-    //    Vector2 shift = newMidpoint - oldMidpoint;
-    //    shifts.Add(shift);
-
-    //    float angleChange = newLine.Angle - oldLine.Angle;
-    //    angleChanges.Add(angleChange);
-
-    //    Debug.WriteLine($"Line {i}: Old Midpoint: {oldMidpoint}, New Midpoint: {newMidpoint}, Shift: {shift}, Angle Change: {angleChange}");
-    //  }
-
-    //  // Compute the average shift (translation)
-    //  Vector2 avgShift = shifts.Aggregate(Vector2.Zero, (sum, v) => sum + v) / shifts.Count;
-    //  float avgRotation = angleChanges.Sum() / angleChanges.Count;
-
-    //  Debug.WriteLine($"Computed Shift: {avgShift}, Computed Rotation: {avgRotation}");
-
-    //  if (avgShift.Length() > 0.1f) // Ignore tiny shifts to avoid noise
-    //  {
-    //    _device.SetDevicePosition(_device._devicePosition + avgShift);
-    //    Debug.WriteLine($"New Device Position: {_device._devicePosition}");
-    //  } else
-    //  {
-    //    Debug.WriteLine("No significant shift detected.");
-    //  }
-
-    //  //if (Math.Abs(avgRotation) > 0.01f)
-    //  //{
-    //  //  _device.SetEstimatedRotation(_device._deviceRotation + avgRotation);
-    //  //  Debug.WriteLine($"New Device Rotation: {_device._deviceRotation}");
-    //  //}
-    //}
-
-
-    //private bool IsClusterStraight(List<Vector2> points, Vector2 direction, Vector2 centroid, float baseDeviation)
-    //{
-    //  foreach (var point in points)
-    //  {
-        
-    //    float distanceFromLidar = Vector2.Distance(_device._devicePosition, point); // Assuming LiDAR is at (0,0)
-    //    float allowedDeviation = baseDeviation + (distanceFromLidar * 0.1f); // Increase tolerance for farther points
-
-    //    float projectedDistance = Math.Abs(Vector2.Dot(point - centroid, new Vector2(-direction.Y, direction.X))); // Perpendicular distance
-    //    if (projectedDistance > allowedDeviation)
-    //    {
-    //      return false; // Too much deviation, not a straight cluster
-    //    }
-    //  }
-    //  return true;
-    //}
-
-
-    //private float ComputeDominantLidarAngle(List<float> lidarAngles)
-    //{
-    //  if (lidarAngles.Count < 3) return 0f; // Avoid unstable calculations
-
-    //  float sumSin = 0, sumCos = 0, sumAngles = 0;
-
-    //  foreach (float angle in lidarAngles)
-    //  {
-    //    float normalizedAngle = angle % 360;
-    //    float radians = MathHelper.ToRadians(normalizedAngle);
-
-    //    sumSin += MathF.Sin(radians);
-    //    sumCos += MathF.Cos(radians);
-
-    //    //  Handle angle wrapping inside this loop
-    //    if (normalizedAngle < 90 && sumAngles / lidarAngles.Count > 270)
-    //      normalizedAngle += 360;
-
-    //    sumAngles += normalizedAngle;
-    //  }
-
-    //  if (sumSin == 0 && sumCos == 0) return 0f; // Prevent division errors
-
-    //  float avgRadians = MathF.Atan2(sumSin, sumCos);
-    //  float avgDegrees = MathHelper.ToDegrees(avgRadians) % 360; // Normalize to 0-360
-
-    //  //  Use the weighted average of angles to stabilize results
-    //  avgDegrees = sumAngles / lidarAngles.Count;
-    //  avgDegrees = avgDegrees % 360; // Normalize again
-
-    //  //  Round to the nearest 5 degrees for stability
-    //  avgDegrees = MathF.Round(avgDegrees / 5) * 5;
-
-    //  return MathHelper.ToRadians(avgDegrees);
-    //}
-
-
-    //private (Vector2 Direction, Vector2 Centroid) ComputePCA(List<Vector2> points)
-    //{
-    //  if (points.Count < 2) return (Vector2.UnitX, points[0]); // Default if not enough points
-
-    //  // Compute centroid
-    //  Vector2 centroid = new Vector2(points.Average(p => p.X), points.Average(p => p.Y));
-
-    //  // Compute covariance matrix
-    //  float sumXX = 0, sumXY = 0, sumYY = 0;
-    //  foreach (var p in points)
-    //  {
-    //    float dx = p.X - centroid.X;
-    //    float dy = p.Y - centroid.Y;
-    //    sumXX += dx * dx;
-    //    sumXY += dx * dy;
-    //    sumYY += dy * dy;
-    //  }
-
-    //  // Solve for the eigenvector of the dominant eigenvalue
-    //  float trace = sumXX + sumYY;
-    //  float determinant = (sumXX * sumYY) - (sumXY * sumXY);
-    //  float eigenvalue = (trace + MathF.Sqrt(trace * trace - 4 * determinant)) / 2;
-
-    //  Vector2 direction = new Vector2(sumXY, eigenvalue - sumXX);
-    //  direction.Normalize();
-
-    //  return (direction, centroid);
-    //}
 
   }
 }

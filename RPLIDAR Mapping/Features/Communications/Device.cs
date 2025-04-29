@@ -46,8 +46,9 @@ namespace RPLIDAR_Mapping.Features.Communications
       {
         // Setup serial port to listen when using wifi AND USB is connected
         if (communicationType.ToLower() == "wifi")
-        { 
-          StartSerialListener(connectionParameters.SerialPort);
+        {
+
+          //StartSerialListener(connectionParameters.SerialPort);
         }
         _communication = communicationType.ToLower() switch
         {
@@ -66,7 +67,7 @@ namespace RPLIDAR_Mapping.Features.Communications
       if (_communication != null)
       {
         _communication.OnMessageReceived += _GuiManager.AddLogMessage;
-        _communication.InitializeMode();
+        //_communication.InitializeMode();
       }
 
       _LidarSettings = new LidarSettings();
@@ -165,7 +166,7 @@ namespace RPLIDAR_Mapping.Features.Communications
         _serialListenerThread.Start();
         Log(" Serial listener thread started");
         // Send init mode as wifi over serial, when using wifi. 
-        SendInitMode();
+        //SendInitMode();
 
         Log($"Started Serial listening on {portName}");
       }

@@ -131,7 +131,7 @@ namespace RPLIDAR_Mapping.Core
       {
         while (!_device.IsInitialized)
         {
-          Log("Waiting for device to initialize...");
+          //Log("Waiting for device to initialize...");
           System.Threading.Thread.Sleep(1000);
         }
 
