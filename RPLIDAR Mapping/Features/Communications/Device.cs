@@ -81,15 +81,6 @@ namespace RPLIDAR_Mapping.Features.Communications
 
       float deltaTimeSec = (timeStamp - lastVelocityTimestamp) / 1000.0f;
       Vector2 convertedVelocity = new Vector2(-velocity.X, velocity.Y);
-      //float yawRadians = _deviceOrientation;
-
-      //float cos = MathF.Cos(yawRadians);
-      //float sin = MathF.Sin(yawRadians);
-
-      ////Vector2 rotatedVelocity = new Vector2(
-      ////    velocity.X * cos - velocity.Y * sin,
-      ////    velocity.X * sin + velocity.Y * cos
-      ////);
 
       Vector2 movement = convertedVelocity * deltaTimeSec;
 

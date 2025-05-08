@@ -566,7 +566,7 @@ void setup() {
 		wifiConfigured = connectWiFi(ssid, password);
 
 		if (wifiConfigured) {
-			setupMQTT();   // 🚀 only after WiFi OK
+			setupMQTT();   //  only after WiFi OK
 		}
 		else {
 			SendStatusMessage("Failed to connect WiFi. Waiting for settings...");
@@ -744,11 +744,11 @@ void SendState() {
 	}
 }
 void handleLdsError(LDS::result_t code, String aux) {
-	SendStatusMessage("🔴 LDS error: " + code + aux);
+	SendStatusMessage(" LDS error: " + code + aux);
 
 }
 void handleLdsInfo(LDS::info_t code, String value) {
-	SendStatusMessage("ℹ️ LDS info: " + lidar.infoCodeToString(code) + " = " + value);
+	SendStatusMessage(" LDS info: " + lidar.infoCodeToString(code) + " = " + value);
 
 }
 

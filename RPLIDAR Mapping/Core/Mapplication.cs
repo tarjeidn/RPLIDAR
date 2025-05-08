@@ -207,7 +207,7 @@ namespace RPLIDAR_Mapping.Core
       {
         if (_device != null)
         {
-          _device.Send("P"); // 🔴 Send stop command before disposal
+          _device.Send("P"); //  Send stop command before disposal
           Log("Sent STOP command to LiDAR.");
           Thread.Sleep(500); // Small delay to ensure command is sent
 

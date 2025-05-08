@@ -223,7 +223,7 @@ namespace RPLIDAR_Mapping {
         
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("wifi")]
+        [global::System.Configuration.DefaultSettingValueAttribute("serial")]
         public string CommunicationProtocol {
             get {
                 return ((string)(this["CommunicationProtocol"]));

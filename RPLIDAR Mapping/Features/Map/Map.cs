@@ -230,9 +230,6 @@ namespace RPLIDAR_Mapping.Features.Map
           _tileMerge.Update();
           if (_tileMerge.CurrentState == TileMerge.MergeState.ReadyToDraw)
           {
-
-
-
             _currentState = MapUpdateState.RunningTrustRegulator;
           }
           break;

@@ -98,7 +98,7 @@ namespace RPLIDAR_Mapping.Features.Communications
           await _mqttClient.SubscribeAsync(_statusTopic);
           Debug.WriteLine("[Wireless] Subscribed to topics.");
 
-          // 🚀 Send SET_MODE:WIFI immediately after subscribing
+          //  Send SET_MODE:WIFI immediately after subscribing
           await _mqttClient.PublishAsync(new MqttApplicationMessageBuilder()
               .WithTopic(_commandTopic)
               .WithPayload("SET_MODE:WIFI")

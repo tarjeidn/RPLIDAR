@@ -54,7 +54,7 @@
       <Value Profile="(Default)">False</Value>
     </Setting>
     <Setting Name="CommunicationProtocol" Type="System.String" Scope="User">
-      <Value Profile="(Default)">wifi</Value>
+      <Value Profile="(Default)">serial</Value>
     </Setting>
     <Setting Name="LIDARDataBatchSize" Type="System.Int32" Scope="User">
       <Value Profile="(Default)">50</Value>

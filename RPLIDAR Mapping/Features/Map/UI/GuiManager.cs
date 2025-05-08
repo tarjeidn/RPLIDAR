@@ -138,7 +138,7 @@ public class GuiManager
       }
       else
       {
-        // 🆕 New logic
+        
         if (_connectionAttemptStartTime == null)
         {
           _connectionAttemptStartTime = DateTime.Now;
@@ -215,7 +215,7 @@ public class GuiManager
     }
 
     float zoom = MapScaleManager.Instance.MapZoomFactor;
-    float gridScaleFactor = MapScaleManager.Instance.ScaleFactor;
+
     float minPointDistance = _map._minPointDistance;
     int maxPointDistance = _map.MaxAcceptableDistance;
     int minPointQuality = _map._minPointQuality;
@@ -224,13 +224,8 @@ public class GuiManager
     bool drawTiles = UtilityProvider.MapRenderer.DrawTilesToMap;
     bool drawRingTiles = UtilityProvider.MapRenderer.DrawRingTilesToMap;
 
-    if (ImGui.SliderFloat("Mapa Scale", ref gridScaleFactor, 0.1f, 8.0f, "%.2f"))
-    {
-      MapScaleManager.Instance.SetScaleFactor(gridScaleFactor);
-      _MainApplication.MapUpdated = true;
-    }
-    if (ImGui.SliderFloat("Zoom", ref zoom, 0.05f, 1))
-      MapScaleManager.Instance.SetMapZoomFactor(zoom);
+
+
     if (ImGui.SliderInt("Minimum point quality", ref minPointQuality, 0, 100))
       _map._minPointQuality = minPointQuality;
     if (ImGui.SliderFloat("Minimum Point Distance", ref minPointDistance, 0, 200))
@@ -271,14 +266,11 @@ public class GuiManager
 
       }
       // Regulator Settings Tab
-      if (ImGui.BeginTabItem("Regulator Settings"))
+      if (ImGui.BeginTabItem("Drawing Options"))
       {
-        DrawTileRegulatorSettings();
+        DrawDrawingSettingsWindow();
       }
-      if (ImGui.BeginTabItem("Map scale Settings"))
-      {
-        DrawScalingSettings();
-      }
+
 
       ImGui.EndTabBar();
     }
@@ -357,7 +349,7 @@ public class GuiManager
     ImGui.EndTabItem();
   }
 
-  private void DrawTileRegulatorSettings()
+  private void DrawDrawingSettingsWindow()
   {
 
     //  Display dynamically updating values
@@ -381,6 +373,12 @@ public class GuiManager
     int minTileClusterSize = _tileMerge.MinTileClusterSize;
     int mergeTileRadius = _tileMerge.mergeTileRadius;
     int mergeClusterRadius = _tileMerge.mergeClusterRadius;
+    float gridScaleFactor = MapScaleManager.Instance.ScaleFactor;
+    if (ImGui.SliderFloat("Map Scale", ref gridScaleFactor, 0.1f, 8.0f, "%.2f"))
+    {
+      MapScaleManager.Instance.SetScaleFactor(gridScaleFactor);
+      _MainApplication.MapUpdated = true;
+    }
 
     //  Sliders allow manual adjustments (values are updated in TileTrustRegulator)
     if (ImGui.Checkbox("Compute merged points", ref computeMerged))
@@ -463,22 +461,6 @@ public class GuiManager
 
     ImGui.EndTabItem();
 
-  }
-  private void DrawScalingSettings()
-  {
-
-
-
-
-    float gridAreaMeters = AppSettings.Default.TileTrustIncrement;
-
-    if (ImGui.SliderFloat("Grid size (meters)", ref gridAreaMeters, 0.1f, 5.0f, "%.2f"))
-      MapScaleManager.Instance.SetGridAreaMeters(gridAreaMeters);
-
-
-    ImGui.Text($"Tile pixel size: {MapScaleManager.Instance.ScaledTileSizePixels}");
-
-    ImGui.EndTabItem();
   }
 
 

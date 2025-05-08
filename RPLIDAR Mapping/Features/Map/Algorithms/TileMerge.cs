@@ -33,8 +33,8 @@ namespace RPLIDAR_Mapping.Features.Map.Algorithms
     public Map _map { get; set; }
     public int MergeFrequency = 20;
     public int MinMergedTileSize = 50;
-    public int mergeTileRadius = 10;
-    public int mergeClusterRadius = 2;
+    public int mergeTileRadius = 2;
+    public int mergeClusterRadius = 1;
     
     public int MinTileClusterSize = 10;
     public int MinLargeFeaturesLineLength = 100;
