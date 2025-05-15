@@ -28,6 +28,7 @@ namespace RPLIDAR_Mapping.Features.Communications
 
     private bool _connecting = false;
     private bool _shouldReconnect = true;
+    private bool _modeConfirmed = false;
 
     public bool IsConnected => _mqttClient?.IsConnected ?? false;
     public bool IsInitialized { get; private set; } = false;
@@ -89,7 +90,6 @@ namespace RPLIDAR_Mapping.Features.Communications
             Connect();
           }
         };
-
         _mqttClient.ConnectedAsync += async e =>
         {
           Debug.WriteLine("[Wireless] Connected to MQTT broker!");
@@ -98,17 +98,53 @@ namespace RPLIDAR_Mapping.Features.Communications
           await _mqttClient.SubscribeAsync(_statusTopic);
           Debug.WriteLine("[Wireless] Subscribed to topics.");
 
-          //  Send SET_MODE:WIFI immediately after subscribing
-          await _mqttClient.PublishAsync(new MqttApplicationMessageBuilder()
-              .WithTopic(_commandTopic)
-              .WithPayload("SET_MODE:WIFI")
-              .Build());
+          // Start retry loop to send SET_MODE:WIFI until confirmed
+          _ = Task.Run(async () =>
+          {
+            int attempt = 0;
+            while (!_modeConfirmed && attempt < 10)  // or until timeout
+            {
+              var msg = new MqttApplicationMessageBuilder()
+                  .WithTopic(_commandTopic)
+                  .WithPayload("SET_MODE:WIFI")
+                  .Build();
 
-          Debug.WriteLine("[Wireless] Sent SET_MODE:WIFI command after connection.");
+              await _mqttClient.PublishAsync(msg);
+              Debug.WriteLine($"[Wireless] Sent SET_MODE:WIFI command (attempt {attempt + 1})");
+
+              attempt++;
+              await Task.Delay(1000);  // 1 second delay between retries
+            }
+
+            if (!_modeConfirmed)
+            {
+              Debug.WriteLine("[Wireless] Mode not confirmed after retries!");
+            }
+          });
 
           IsInitialized = true;
           _connecting = false;
         };
+
+        //_mqttClient.ConnectedAsync += async e =>
+        //{
+        //  Debug.WriteLine("[Wireless] Connected to MQTT broker!");
+        //  await _mqttClient.SubscribeAsync(_commandTopic);
+        //  await _mqttClient.SubscribeAsync(_dataTopic);
+        //  await _mqttClient.SubscribeAsync(_statusTopic);
+        //  Debug.WriteLine("[Wireless] Subscribed to topics.");
+
+        //  //  Send SET_MODE:WIFI immediately after subscribing
+        //  await _mqttClient.PublishAsync(new MqttApplicationMessageBuilder()
+        //      .WithTopic(_commandTopic)
+        //      .WithPayload("SET_MODE:WIFI")
+        //      .Build());
+
+        //  Debug.WriteLine("[Wireless] Sent SET_MODE:WIFI command after connection.");
+
+        //  IsInitialized = true;
+        //  _connecting = false;
+        //};
 
         Connect();
       }
@@ -165,6 +201,7 @@ namespace RPLIDAR_Mapping.Features.Communications
         string message = Encoding.UTF8.GetString(payload);
         Debug.WriteLine($"[Wireless] Status message: {message}");
         OnMessageReceived?.Invoke($"Status: {message}");
+        if (message.Contains("Connected to MQTT")) _modeConfirmed = true;
       }
       else if (topic == _commandTopic)
       {

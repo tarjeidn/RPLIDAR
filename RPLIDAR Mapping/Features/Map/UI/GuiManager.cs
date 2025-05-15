@@ -196,10 +196,10 @@ public class GuiManager
       {
         UserSelection.InferLinesBetweenSelected();
       }
-      if (ImGui.Button("Delete selected lines"))
-      {
-        UserSelection.DeleteSelectedLines();
-      }
+      //if (ImGui.Button("Delete selected lines"))
+      //{
+      //  UserSelection.DeleteSelectedLines();
+      //}
     }
     if (UserSelection.highlightedLines.Count > 0 ) // Only show if lines are selected
     {
@@ -208,10 +208,10 @@ public class GuiManager
       {
         UserSelection.MergeSelectedLinesIntoWalls();
       }
-      if (ImGui.Button("Smooth Premanent Lines"))
-      {
-        UserSelection.SmoothPermanentLines();
-      }
+      //if (ImGui.Button("Smooth Premanent Lines"))
+      //{
+      //  UserSelection.SmoothPermanentLines();
+      //}
     }
 
     float zoom = MapScaleManager.Instance.MapZoomFactor;
@@ -220,9 +220,10 @@ public class GuiManager
     int maxPointDistance = _map.MaxAcceptableDistance;
     int minPointQuality = _map._minPointQuality;
     int MinTileBufferSizeToAdd = _map.MinTileBufferSizeToAdd;
-    bool drawSightlines = UtilityProvider.MapRenderer.DrawSightLines;
-    bool drawTiles = UtilityProvider.MapRenderer.DrawTilesToMap;
-    bool drawRingTiles = UtilityProvider.MapRenderer.DrawRingTilesToMap;
+    bool runOffsetSweep = _map.runOffsetSweep;
+    bool runAngularOffset = _map.runAngularOffset;
+    bool runClusterOffset = _map.runClusterOffset;
+    
 
 
 
@@ -230,7 +231,7 @@ public class GuiManager
       _map._minPointQuality = minPointQuality;
     if (ImGui.SliderFloat("Minimum Point Distance", ref minPointDistance, 0, 200))
       _map._minPointDistance = minPointDistance;
-    if (ImGui.SliderInt("MinimumPointDistance", ref maxPointDistance, 200, 6000))
+    if (ImGui.SliderInt("Maximum Point Distance", ref maxPointDistance, 200, 6000))
       _map.MaxAcceptableDistance = maxPointDistance;
     if (ImGui.SliderInt("Minimum tiles to add", ref MinTileBufferSizeToAdd, 0, 500))
       _map.MinTileBufferSizeToAdd = MinTileBufferSizeToAdd;
@@ -239,17 +240,18 @@ public class GuiManager
       ImGui.GetIO().FontGlobalScale = _fontScale;
       ImGui.GetIO().DisplayFramebufferScale = new System.Numerics.Vector2(_fontScale, _fontScale);
     }
-    if (ImGui.Checkbox("Draw sightlines", ref drawSightlines))
+
+    if (ImGui.Checkbox("Run offset sweep estimation", ref runOffsetSweep))
     {
-      UtilityProvider.MapRenderer.DrawSightLines = drawSightlines;
+      _map.runOffsetSweep = runOffsetSweep;
     }
-    if (ImGui.Checkbox("Draw raw tiles", ref drawTiles))
+    if (ImGui.Checkbox("Run angular offset estimation", ref runAngularOffset))
     {
-      UtilityProvider.MapRenderer.DrawTilesToMap = drawTiles;
+      _map.runAngularOffset = runAngularOffset;
     }
-    if (ImGui.Checkbox("Draw ring tiles", ref drawRingTiles))
+    if (ImGui.Checkbox("Run cluster offset estimation", ref runClusterOffset))
     {
-      UtilityProvider.MapRenderer.DrawRingTilesToMap = drawRingTiles;
+      _map.runClusterOffset = runClusterOffset;
     }
     //  Begin Tabs
     if (ImGui.BeginTabBar("MainTabs"))
@@ -374,6 +376,10 @@ public class GuiManager
     int mergeTileRadius = _tileMerge.mergeTileRadius;
     int mergeClusterRadius = _tileMerge.mergeClusterRadius;
     float gridScaleFactor = MapScaleManager.Instance.ScaleFactor;
+    bool drawSightlines = UtilityProvider.MapRenderer.DrawSightLines;
+    bool drawTiles = UtilityProvider.MapRenderer.DrawTilesToMap;
+    bool drawRingTiles = UtilityProvider.MapRenderer.DrawRingTilesToMap;
+    bool drawNeighbourLinks = UtilityProvider.MapRenderer.drawNeighbourLinks;
     if (ImGui.SliderFloat("Map Scale", ref gridScaleFactor, 0.1f, 8.0f, "%.2f"))
     {
       MapScaleManager.Instance.SetScaleFactor(gridScaleFactor);
@@ -409,7 +415,19 @@ public class GuiManager
     {
       _tileMerge.DrawMergedLines = drawMergedLines;
     }
+    if (ImGui.Checkbox("Draw neighbour links", ref drawNeighbourLinks))
+    {
+      UtilityProvider.MapRenderer.drawNeighbourLinks = drawNeighbourLinks;
+    }
     ImGui.EndDisabled();
+    if (ImGui.Checkbox("Draw sightlines", ref drawSightlines))
+    {
+      UtilityProvider.MapRenderer.DrawSightLines = drawSightlines;
+    }
+    if (ImGui.Checkbox("Draw raw tiles", ref drawTiles))
+    {
+      UtilityProvider.MapRenderer.DrawTilesToMap = drawTiles;
+    }
     if (ImGui.SliderInt("Tile merge radius (tiles)", ref mergeTileRadius, 0, 50))
       _tileMerge.mergeTileRadius = mergeTileRadius; ;
     if (ImGui.SliderInt("Cluster merge radius (tiles)", ref mergeClusterRadius, 0, 100))
@@ -428,10 +446,6 @@ public class GuiManager
       _tileMerge.MergeFrequency = mergeFrequency;
     }
 
-    if (ImGui.SliderFloat("Tile merge threshold (pixels)", ref tileMergeThreshold, 0, 100))
-    {
-      _tileMerge.TileMergeThreshold = tileMergeThreshold;
-    }
 
     //  Regulator section
     if (ImGui.Checkbox("Enable Regulator", ref regulatorEnabled))

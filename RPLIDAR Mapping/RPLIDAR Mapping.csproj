@@ -7,6 +7,7 @@
 		<PublishReadyToRun>false</PublishReadyToRun>
 		<TieredCompilation>false</TieredCompilation>
 		<UseWindowsForms>true</UseWindowsForms>
+		<AssemblyName>RPLIDAR_Mapping</AssemblyName>
 	</PropertyGroup>
 
 	<PropertyGroup>
@@ -22,6 +23,10 @@
 		<PackageReference Include="MQTTnet" Version="5.0.1.1416" />
 		<PackageReference Include="MQTTnet.Server" Version="5.0.1.1416" />
 		<PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+		<PackageReference Include="PlantUmlClassDiagramGenerator.SourceGenerator" Version="1.1.0">
+			<PrivateAssets>all</PrivateAssets>
+			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+		</PackageReference>
 		<PackageReference Include="System.IO.Ports" Version="9.0.0" />
 	</ItemGroup>
 
@@ -61,5 +66,18 @@
 		<Message Text="Restoring dotnet tools" Importance="High" />
 		<Exec Command="dotnet tool restore" />
 	</Target>
+
+	<!-- Enable PlantUML generation in Release mode -->
+	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+		<DefineConstants>$(DefineConstants);GENERATE_PLANTUML</DefineConstants>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<CompilerVisibleProperty Include="PlantUmlGenerator_OutputDir" />
+	</ItemGroup>
+
+	<PropertyGroup>
+		<PlantUmlGenerator_OutputDir>$(ProjectDir)generated_uml</PlantUmlGenerator_OutputDir>
+	</PropertyGroup>
 
 </Project>

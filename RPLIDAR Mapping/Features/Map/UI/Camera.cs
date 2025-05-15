@@ -17,7 +17,7 @@ namespace RPLIDAR_Mapping.Features.Map.UI
     private int ScreenWidth;
     private int ScreenHeight;
     private Vector2 DestRectPos;
-    public Vector2 Position { get; private set; } = Vector2.Zero;
+    public Vector2 Position { get; set; } = Vector2.Zero;
     public Vector2 ZoomFocusPoint { get; private set; }
     public Device _device {  get; set; }
     private GraphicsDevice _graphicsDevice;

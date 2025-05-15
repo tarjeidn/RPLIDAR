@@ -97,7 +97,7 @@ public class ICP
           weightedSum += delta * weight;
           weightSum += weight;
 
-          Debug.WriteLine($"🔍 Match Δ: {delta} (from {from} to {to})");
+          Debug.WriteLine($" Match Δ: {delta} (from {from} to {to})");
         }
 
         finalOffset = (weightSum > 0f) ? weightedSum / weightSum : Vector2.Zero;

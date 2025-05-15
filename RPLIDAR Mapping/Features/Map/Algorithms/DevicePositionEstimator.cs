@@ -17,10 +17,13 @@ using static RPLIDAR_Mapping.Features.Map.Map;
 
 namespace RPLIDAR_Mapping.Features.Map.Algorithms
 {
+  /// <summary>
+  /// Provides motion estimation logic for determining LiDAR device translation between scans using historical angle data and tile structures.
+  /// </summary>
   public class MotionEstimator
   {
     private readonly Dictionary<int, DataPoint> _lastKnownPoints = new();
-    private const float MaxDeltaThreshold = 20f; // max mm change allowed per beam
+    private const float MaxDeltaThreshold = 20f;
     private const float MinValidMatches = 0.8f;
     private const float MinOffsetMagnitude = 2.0f;
     private Vector2 _lastOffset = Vector2.Zero;
@@ -29,46 +32,37 @@ namespace RPLIDAR_Mapping.Features.Map.Algorithms
     private readonly Queue<(Vector2 position, float time)> _positionHistory = new();
     private const int PositionHistoryLength = 10;
 
+
     public Vector2 LastEstimatedOffset = Vector2.Zero;
+    /// <summary>
+    /// Determines whether the device is currently moving slowly, based on the last estimated offset.
+    /// </summary>
     public bool IsDeviceMovingSlowly()
     {
-      const float MovementThreshold = 1.0f; // 🔥 Threshold in pixels
+      const float MovementThreshold = 1.0f;
       return LastEstimatedOffset.Length() < MovementThreshold;
     }
+
+    /// <summary>
+    /// Estimates a gentle correction offset toward the average center of stable tile clusters.
+    /// </summary>
     public static Vector2 EstimateCorrectionFromClusters(List<TileCluster> clusters, Vector2 devicePos)
     {
-      if (clusters.Count == 0)
-        return Vector2.Zero;
+      var stableClusters = clusters.Where(c => c.Tiles.Count >= 10).ToList();
+      if (stableClusters.Count == 0) return Vector2.Zero;
 
-      // 🔥 Find stable clusters
-      var stableClusters = clusters
-          .Where(c => c.Tiles.Count >= 10) // only reasonably large clusters
-          .ToList();
-
-      if (stableClusters.Count == 0)
-        return Vector2.Zero;
-
-      // 🔥 Calculate average offset between device and clusters
       Vector2 totalOffset = Vector2.Zero;
-      int count = 0;
-
       foreach (var cluster in stableClusters)
-      {
-        Vector2 toCluster = cluster.Center - devicePos;
-        totalOffset += toCluster;
-        count++;
-      }
+        totalOffset += (cluster.Center - devicePos);
 
-      if (count == 0)
-        return Vector2.Zero;
-
-      Vector2 averageOffset = totalOffset / count;
-
-      // 🔥 Don't apply full offset, just a small fraction to avoid oscillation
-      const float CorrectionStrength = 0.05f; // 🔥 5% pull toward clusters
+      Vector2 averageOffset = totalOffset / stableClusters.Count;
+      const float CorrectionStrength = 0.05f;
       return averageOffset * CorrectionStrength;
     }
 
+    /// <summary>
+    /// Estimates the device offset by comparing angle-to-position history between current and previous LiDAR points.
+    /// </summary>
     public Vector2 EstimateDeviceOffsetFromAngleHistory(List<DataPoint> currentBatch)
     {
       List<Vector2> deltas = new();
@@ -79,59 +73,40 @@ namespace RPLIDAR_Mapping.Features.Map.Algorithms
         float adjustedAngleDeg = point.Angle + point.Yaw;
         int angleKey = (int)(adjustedAngleDeg * 10f);
 
-
-        // ✅ Protect from Overflow (clamp or wrap keys)
         if (angleKey == int.MinValue)
           angleKey = int.MinValue + 1;
+
         int angleKeyWindow = 2;
-
-        bool matchFound = false;
-
-        for (int i = -angleKeyWindow; i <= angleKeyWindow; i++) // 👈 check angleKey ±1
+        for (int i = -angleKeyWindow; i <= angleKeyWindow; i++)
         {
           int testKey = angleKey + i;
-
           if (_lastKnownPoints.TryGetValue(testKey, out var previousPoint))
           {
             Vector2 oldRel = previousPoint.GlobalPosition - previousPoint.DevicePositionAtHit;
             Vector2 newRel = point.GlobalPosition - point.DevicePositionAtHit;
-
             Vector2 delta = oldRel - newRel;
-
 
             if (delta.Length() < MaxDeltaThreshold)
             {
               deltas.Add(delta);
               latestTimestamp = Math.Max(latestTimestamp, point.TimeStamp);
-              matchFound = true;
-              break; // ✅ use first valid match
+              break;
             }
           }
         }
 
-
         _lastKnownPoints[angleKey] = point;
       }
 
-      if (deltas.Count < MinValidMatches)
-        return Vector2.Zero;
-
-      // Step 1: Outlier filtering
+      if (deltas.Count < MinValidMatches) return Vector2.Zero;
       deltas = FilterOutliersMAD(deltas);
-      if (deltas.Count < MinValidMatches)
-        return Vector2.Zero;
+      if (deltas.Count < MinValidMatches) return Vector2.Zero;
 
-      // Step 2: Compute offset
       Vector2 offset = ComputeMedian(deltas);
-      if (offset.Length() < MinOffsetMagnitude)
-        return Vector2.Zero;
+      if (offset.Length() < MinOffsetMagnitude) return Vector2.Zero;
 
-
-
-      // Final smoothing
       _lastOffset = Vector2.Lerp(_lastOffset, offset, LerpFactor);
       return _lastOffset;
-
     }
 
     private List<Vector2> FilterOutliersMAD(List<Vector2> deltas, float madMultiplier = 2.5f)
@@ -171,59 +146,52 @@ namespace RPLIDAR_Mapping.Features.Map.Algorithms
 
       return new Vector2(medianX, medianY);
     }
-        ///////////////////////////////
-        public Vector2 EstimateOffsetAdaptive(List<DataPoint> dplist, Vector2 guessedDevicePosition)
-        {
-            float tileSize = 10f;
-            int initialSearchRadius = 4;     // or 5
-            int extendedSearchRadius = 7;    // or 8
-            float maxOffsetLength = 20f;
-            float allowedNeighborError = 0.3f; // tighter
-            float minMatchRatio = 0.3f;        // higher confidence
-            float minOffsetMagnitude = 0.1f;
-            float maxAcceptableError = 0.7f;   // more picky
-            var originalNeighbors = new Dictionary<Tile, (Tile Left, Tile Right, Tile Top, Tile Bottom)>();
-            foreach (var tile in UtilityProvider.Map._gridManager.GetAllTrustedTiles())
-            {
-                originalNeighbors[tile] = (
-                    tile.LeftAngularNeighbor,
-                    tile.RightAngularNeighbor,
-                    tile.TopAngularNeighbor,
-                    tile.BottomAngularNeighbor
-                );
-            }
-            // Step 1: Run initial sweep
-            var (offset, matchCount, neighborError) = RunOffsetSweep(
-                dplist, guessedDevicePosition, initialSearchRadius,
-                tileSize, maxOffsetLength, allowedNeighborError, minMatchRatio, originalNeighbors
-            );
+    /// <summary>
+    /// Runs an adaptive matching routine that sweeps candidate offsets and selects the best match.
+    /// </summary>
+    public Vector2 EstimateOffsetAdaptive(List<DataPoint> dplist, Vector2 guessedDevicePosition)
+    {
+      // Parameters
+      float tileSize = 10f;
+      int initialSearchRadius = 4;
+      int extendedSearchRadius = 7;
+      float maxOffsetLength = 20f;
+      float allowedNeighborError = 0.3f;
+      float minMatchRatio = 0.3f;
+      float minOffsetMagnitude = 0.1f;
+      float maxAcceptableError = 0.7f;
 
-            //Debug.WriteLine($"🔍 Initial offset = {offset}, matchCount = {matchCount}, error = {neighborError:F2}");
+      var originalNeighbors = UtilityProvider.Map._gridManager.GetAllTrustedTiles()
+          .ToDictionary(
+              tile => tile,
+              tile => (
+                  tile.LeftAngularNeighbor,
+                  tile.RightAngularNeighbor,
+                  tile.TopAngularNeighbor,
+                  tile.BottomAngularNeighbor
+              ));
 
-            if (matchCount == 0 || offset.Length() < minOffsetMagnitude || neighborError > maxAcceptableError)
-            {
-                //Debug.WriteLine($"⚠️ Initial sweep too noisy. Triggering fallback sweep.");
+      var (offset, matchCount, neighborError) = RunOffsetSweep(
+          dplist, guessedDevicePosition, initialSearchRadius,
+          tileSize, maxOffsetLength, allowedNeighborError,
+          minMatchRatio, originalNeighbors);
 
-                // Step 2: Fallback extended sweep
-                var (fallbackOffset, fallbackCount, fallbackError) = RunOffsetSweep(
-                    dplist, guessedDevicePosition, extendedSearchRadius,
-                    tileSize, maxOffsetLength, allowedNeighborError, minMatchRatio * 0.8f, // slightly relaxed
-                    originalNeighbors
-                );
+      if (matchCount == 0 || offset.Length() < minOffsetMagnitude || neighborError > maxAcceptableError)
+      {
+        var (fallbackOffset, fallbackCount, fallbackError) = RunOffsetSweep(
+            dplist, guessedDevicePosition, extendedSearchRadius,
+            tileSize, maxOffsetLength, allowedNeighborError,
+            minMatchRatio * 0.8f, originalNeighbors);
 
-                if (fallbackCount > 0 && fallbackOffset.Length() >= minOffsetMagnitude && fallbackError <= maxAcceptableError * 2)
-                {
-                    //Debug.WriteLine($"✅ Fallback successful: offset = {fallbackOffset}, error = {fallbackError:F2}");
-                    return fallbackOffset;
-                }
+        if (fallbackCount > 0 && fallbackOffset.Length() >= minOffsetMagnitude && fallbackError <= maxAcceptableError * 2)
+          return fallbackOffset;
 
-                //Debug.WriteLine("🛑 Fallback failed — returning zero offset.");
-                return Vector2.Zero;
-            }
-            //Debug.WriteLine($"✅ Final offset applied: {offset}");
-            return offset;
-        }
-        private (Vector2 offset, int matchCount, float avgNeighborError) RunOffsetSweep(
+        return Vector2.Zero;
+      }
+
+      return offset;
+    }
+    private (Vector2 offset, int matchCount, float avgNeighborError) RunOffsetSweep(
           List<DataPoint> dplist,
           Vector2 guessedDevicePosition,
           int searchRadius,
@@ -347,12 +315,12 @@ namespace RPLIDAR_Mapping.Features.Map.Algorithms
                 {
                     reject = true;
                 }
-                // ✅ Allow high alignment if structure is strong
+                //  Allow high alignment if structure is strong
                 else if (avgAlignmentScore >= 0.98f && consistencyScore >= 0.85f)
                 {
                     reject = false;
                 }
-                // ✅ Allow low consistency if alignment is orthogonal (indicates structure break)
+                //  Allow low consistency if alignment is orthogonal (indicates structure break)
                 else if (consistencyScore >= 0.3f && avgAlignmentScore < 0.65f)
                 {
                     reject = false;
@@ -368,11 +336,11 @@ namespace RPLIDAR_Mapping.Features.Map.Algorithms
 
                 //if (reject)
                 //{
-                //  Debug.WriteLine($"❌ Offset {candidate} rejected.");
-                //  Debug.WriteLine($"⚠️ matchCount={matchCount}, deltas={deltas.Count}, align={avgAlignmentScore:F2}, consistency={consistencyScore:F2}");
+                //  Debug.WriteLine($" Offset {candidate} rejected.");
+                //  Debug.WriteLine($" matchCount={matchCount}, deltas={deltas.Count}, align={avgAlignmentScore:F2}, consistency={consistencyScore:F2}");
                 //} else
                 //{
-                //Debug.WriteLine($"✅ Offset {candidate} accepted.");
+                //Debug.WriteLine($" Offset {candidate} accepted.");
                 //}
 
 

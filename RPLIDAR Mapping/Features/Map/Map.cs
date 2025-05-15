@@ -35,7 +35,6 @@ namespace RPLIDAR_Mapping.Features.Map
     public HashSet<int> observedAngles = new();
     public MotionEstimator MotionEstimator = new();
     public TileMerge _tileMerge { get; private set; }
-    public InputManager InputManager { get; set; }
     //public List<(Vector2 Start, Vector2 End, float AngleDegrees, float AngleRadians, bool IsPermanent)> PermanentLines = new();
     public List<LineSegment> PermanentLines = new();
     public HashSet<Tile> NewTiles { get; set; } = new();
@@ -53,6 +52,7 @@ namespace RPLIDAR_Mapping.Features.Map
     private List<MapPoint> AddedPoints = new();
     private readonly Dictionary<int, float> _previousInferredDistances = new();
     private Vector2 _lastCoarseOffset = Vector2.Zero;
+    private InputManager _inputManager;
 
 
     public bool _pointsAdded { get; private set; }
@@ -68,6 +68,9 @@ namespace RPLIDAR_Mapping.Features.Map
     public int _minPointQuality = 5;
     public float _minPointDistance = 0;
     public int MaxAcceptableDistance = 4000;
+    public bool runOffsetSweep = true;
+    public bool runAngularOffset = true;
+    public bool runClusterOffset = false;
     bool IsUpdated = false;
     private int IdleFrames = 0;
     public int MinTileBufferSizeToAdd { get; set; } = 50;
@@ -125,11 +128,17 @@ namespace RPLIDAR_Mapping.Features.Map
     }
 
 
+
+    /// <summary>
+    /// Initializes the Map instance and its core components.
+    /// </summary>
+    /// <param name="device">The device used for LiDAR data acquisition.</param>
+    /// <param name="IM">The input manager instance.</param>
     public Map(Device device, InputManager IM)
     {
       _device = device;
       MapScaleManager.Instance._map = this;
-      InputManager = IM;
+      _inputManager = IM;
       _tileTrustRegulator = AlgorithmProvider.TileTrustRegulator;
       _tileMerge = AlgorithmProvider.TileMerge;
       _tileMerge._map = this;
@@ -141,20 +150,24 @@ namespace RPLIDAR_Mapping.Features.Map
       _pointsBuffer = new List<DataPoint>();
       _gridManager = _Distributor._GridManager;
       GridScaleFactor = MapScaleManager.Instance.ScaleFactor;
-
     }
+    
     private MapUpdateState _currentState = MapUpdateState.Idle;
 
+    /// <summary>
+    /// Main update loop for the map. Processes LiDAR data, estimates device position, updates tiles and trust.
+    /// </summary>
+    /// <param name="dplist">List of incoming LiDAR data points.</param>
+    /// <param name="gameTime">Current game timing info.</param>
+    /// <returns>True if the map was updated this frame.</returns>
     public bool Update(List<DataPoint> dplist, GameTime gameTime)
     {
       float deltaTime = (float)gameTime.ElapsedGameTime.TotalSeconds;
       IsUpdated = false;
-      InputManager.Update(gameTime);
-      // Process new LiDAR points
+      _inputManager.Update(gameTime);
+
       if (dplist.Count > 0)
-      {
         _pointsBuffer.AddRange(dplist);
-      }
 
       switch (_currentState)
       {
@@ -166,60 +179,51 @@ namespace RPLIDAR_Mapping.Features.Map
             MatchedTileCount = 0;
             MismatchedTileCount = 0;
             _fpsCounter.IncrementLiDARUpdate();
-            //_currentState = MapUpdateState.AddingNewPoints;
             _currentState = MapUpdateState.SimulateDevicePosition;
-                    }
+          }
           break;
 
-
-
         case MapUpdateState.SimulateDevicePosition:
-
-          // Simulate adding points at estimated position
-          Vector2 simOffset = MotionEstimator.EstimateOffsetAdaptive(_pointsBuffer, _device._devicePosition);
-          _device._devicePosition += simOffset;
-          MotionEstimator.LastEstimatedOffset += simOffset;
+          if (runOffsetSweep)
+          {
+            Vector2 simOffset = MotionEstimator.EstimateOffsetAdaptive(_pointsBuffer, _device._devicePosition);
+            _device._devicePosition += simOffset;
+            MotionEstimator.LastEstimatedOffset += simOffset;
+          }
           _currentState = MapUpdateState.EstimateDevicePosition;
           break;
 
         case MapUpdateState.EstimateDevicePosition:
+          if (runAngularOffset)
           {
             Vector2 offset = MotionEstimator.EstimateDeviceOffsetFromAngleHistory(_pointsBuffer);
             _device._devicePosition += offset;
             MotionEstimator.LastEstimatedOffset += offset;
-            _currentState = MapUpdateState.AddingNewPoints;
-            break;
           }
+          _currentState = MapUpdateState.AddingNewPoints;
+          break;
+
         case MapUpdateState.EstimateDevicePositionFromCluster:
-          if (HasEnoughStableClusters())
+          if (runClusterOffset && HasEnoughStableClusters())
           {
             Vector2 clusterCorrectionOffset = MotionEstimator.EstimateCorrectionFromClusters(_tileMerge.TileClusters, _device._devicePosition);
             _device._devicePosition += clusterCorrectionOffset;
           }
           _currentState = MapUpdateState.AddingNewPoints;
           break;
-          
-        case MapUpdateState.AddingNewPoints:
 
+        case MapUpdateState.AddingNewPoints:
+          _device.UpdatePositionHistory(_device._devicePosition);
           AddPoints(_pointsBuffer);
           _tileMerge.CurrentState = TileMerge.MergeState.NewPointsAdded;
           _pointsBuffer.Clear();
           _currentState = MapUpdateState.DistributePoints;
           break;
 
-
-
         case MapUpdateState.DistributePoints:
-          {
-            _Distributor.Distribute(AddedPoints);
-            //LinkAngularNeighbors();
-            //LinkNearestNeighborsByProximity(NewTiles.ToList());
-
-            _tileMerge.CurrentState = TileMerge.MergeState.NewPointsAdded;
-            _currentState = MapUpdateState.UpdatingTiles;
-
-            //NewTiles.Clear(); 
-          }
+          _Distributor.Distribute(AddedPoints);
+          _tileMerge.CurrentState = TileMerge.MergeState.NewPointsAdded;
+          _currentState = MapUpdateState.UpdatingTiles;
           break;
 
         case MapUpdateState.ComparingToPermanentLines:
@@ -229,15 +233,12 @@ namespace RPLIDAR_Mapping.Features.Map
         case MapUpdateState.UpdatingTiles:
           _tileMerge.Update();
           if (_tileMerge.CurrentState == TileMerge.MergeState.ReadyToDraw)
-          {
             _currentState = MapUpdateState.RunningTrustRegulator;
-          }
           break;
+
         case MapUpdateState.RunningTrustRegulator:
           if (_tileTrustRegulator.RegulatorEnabled)
-          {
             _tileTrustRegulator.Update(deltaTime);
-          }
           _currentState = MapUpdateState.DistributingTiles;
           break;
 
@@ -252,6 +253,7 @@ namespace RPLIDAR_Mapping.Features.Map
           _currentState = MapUpdateState.Idle;
           break;
       }
+
       return IsUpdated;
     }
 

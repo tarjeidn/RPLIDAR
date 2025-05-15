@@ -60,7 +60,7 @@ namespace RPLIDAR_Mapping.Models
       SmoothedRotation = 0f;
       SmoothedSize = Vector2.Zero;
     }
-    // ✅ Copy Constructor (Clones another cluster)
+    //  Copy Constructor (Clones another cluster)
     public TileCluster(TileCluster other)
     {
       Tiles = new HashSet<Tile>(other.Tiles); // Copy tiles
@@ -86,13 +86,13 @@ namespace RPLIDAR_Mapping.Models
 
       if (stableTiles.Count < MinTilesToDraw)
       {
-        Debug.WriteLine($"⚠️ Cluster Unstable: {stableTiles.Count} stable tiles (needs {MinTilesToDraw})");
-        return; // ❌ Skip center update if unstable
+        //Debug.WriteLine($" Cluster Unstable: {stableTiles.Count} stable tiles (needs {MinTilesToDraw})");
+        return; //  Skip center update if unstable
       }
 
-      Debug.WriteLine($"✅ Cluster Stable: {stableTiles.Count} stable tiles");
 
-      // ✅ Only now update the Center/FeatureLine/bounds
+
+      //  Only now update the Center/FeatureLine/bounds
       UpdateCenter(stableTiles);
       UpdateFeatureLine(stableTiles);
       UpdateRotatedBoundingBox(stableTiles);
@@ -401,10 +401,10 @@ namespace RPLIDAR_Mapping.Models
       {
         if (AlgorithmProvider.TileMerge.TileClusters.Contains(this))
         {
-          AlgorithmProvider.TileMerge.TileClusters.Remove(this); // ✅ Remove from global clusters
+          AlgorithmProvider.TileMerge.TileClusters.Remove(this); //  Remove from global clusters
         }
 
-        // ✅ Remove associated merged line
+        //  Remove associated merged line
         AlgorithmProvider.TileMerge._mergedLines.RemoveAll(line => line.ParentCluster == this);
       }
       if (Tiles.Count == 0)
@@ -455,10 +455,10 @@ namespace RPLIDAR_Mapping.Models
 
       List<Vector2> points = Tiles.Select(t => t.GlobalCenter).ToList();
 
-      // ✅ Compute PCA for dominant axis
+      //  Compute PCA for dominant axis
       (Vector2 direction, Vector2 centroid) = ComputePCA(points);
 
-      // ✅ Sort points along dominant direction
+      //  Sort points along dominant direction
       points.Sort((a, b) => Vector2.Dot(a - centroid, direction).CompareTo(Vector2.Dot(b - centroid, direction)));
 
       Vector2 start = points.First();

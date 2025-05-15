@@ -1,0 +1,240 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<ClassDiagram MajorVersion="1" MinorVersion="1">
+  <Comment CommentText="Grid system">
+    <Position X="6.138" Y="8.53" Height="0.355" Width="0.981" />
+  </Comment>
+  <Comment CommentText="Algorithms&#xD;&#xA;">
+    <Position X="9.861" Y="6.081" Height="0.337" Width="0.909" />
+  </Comment>
+  <Comment CommentText="Communications">
+    <Position X="8.153" Y="2.323" Height="0.355" Width="1.149" />
+  </Comment>
+  <Comment CommentText="Rendering">
+    <Position X="0.945" Y="5.211" Height="0.373" Width="0.76" />
+  </Comment>
+  <Comment CommentText="&lt;---- LiDAR/Arduino">
+    <Position X="11.403" Y="3.415" Height="0.331" Width="1.347" />
+  </Comment>
+  <Class Name="RPLIDAR_Mapping.Core.Mapplication" Collapsed="true">
+    <Position X="4.5" Y="2.25" Width="2" />
+    <AssociationLine Name="_inputManager" Type="RPLIDAR_Mapping.Utilities.InputManager" FixedFromPoint="true" FixedToPoint="true">
+      <Path>
+        <Point X="4.688" Y="2.941" />
+        <Point X="4.688" Y="3.531" />
+        <Point X="3.75" Y="3.531" />
+      </Path>
+    </AssociationLine>
+    <AssociationLine Name="_mapRenderer" Type="RPLIDAR_Mapping.Features.Map.MapRenderer" FixedFromPoint="true" FixedToPoint="true">
+      <Path>
+        <Point X="5.25" Y="2.941" />
+        <Point X="5.25" Y="5.412" />
+        <Point X="3.75" Y="5.412" />
+      </Path>
+    </AssociationLine>
+    <AssociationLine Name="_device" Type="RPLIDAR_Mapping.Features.Communications.Device" FixedFromPoint="true" FixedToPoint="true">
+      <Path>
+        <Point X="5.938" Y="2.941" />
+        <Point X="5.938" Y="4.109" />
+        <Point X="6.5" Y="4.109" />
+      </Path>
+    </AssociationLine>
+    <TypeIdentifier>
+      <HashCode>EASEESAABiAIAyAAACAAQAAgAgEAgAACAOAAACAAAgQ=</HashCode>
+      <FileName>Core\Mapplication.cs</FileName>
+    </TypeIdentifier>
+    <ShowAsAssociation>
+      <Field Name="_inputManager" />
+      <Field Name="_map" />
+      <Field Name="_mapRenderer" />
+      <Field Name="_device" />
+      <Field Name="_guiManager" />
+    </ShowAsAssociation>
+  </Class>
+  <Class Name="GuiManager" Collapsed="true">
+    <Position X="0.5" Y="4.25" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAIEAAAAkAAAgAIAABAMgBAAADCIgEAAEAAIEEAE0A=</HashCode>
+      <FileName>Features\Map\UI\GuiManager.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="RPLIDAR_Mapping.Utilities.InputManager" Collapsed="true">
+    <Position X="2.25" Y="3.25" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>BAQBAAQAIIAAAAAAgAAAAAAAAAAAgAAAAAABAAgAAAQ=</HashCode>
+      <FileName>Utilities\InputManager.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="RPLIDAR_Mapping.Features.Map.MapRenderer" Collapsed="true">
+    <Position X="2.25" Y="5.25" Width="1.5" />
+    <AssociationLine Name="_map" Type="RPLIDAR_Mapping.Features.Map.Map" ManuallyRouted="true">
+      <Path>
+        <Point X="3" Y="5.812" />
+        <Point X="3" Y="6.281" />
+        <Point X="4.25" Y="6.281" />
+      </Path>
+    </AssociationLine>
+    <TypeIdentifier>
+      <HashCode>EAYGgSAAQCGgACAAggBwBACgUEAAgRAAQEAGBQDhAAY=</HashCode>
+      <FileName>Features\Map\MapRenderer.cs</FileName>
+    </TypeIdentifier>
+    <ShowAsAssociation>
+      <Field Name="_Camera" />
+      <Field Name="_map" />
+    </ShowAsAssociation>
+  </Class>
+  <Class Name="RPLIDAR_Mapping.Features.Map.Map" Collapsed="true">
+    <Position X="4.25" Y="6" Width="2" />
+    <AssociationLine Name="_device" Type="RPLIDAR_Mapping.Features.Communications.Device" FixedFromPoint="true" FixedToPoint="true">
+      <Path>
+        <Point X="5.938" Y="6" />
+        <Point X="5.938" Y="4.5" />
+        <Point X="6.5" Y="4.5" />
+      </Path>
+    </AssociationLine>
+    <AssociationLine Name="_tileTrustRegulator" Type="RPLIDAR_Mapping.Features.Map.Algorithms.TileTrustRegulator" FixedFromPoint="true" FixedToPoint="true">
+      <Path>
+        <Point X="5.875" Y="6.562" />
+        <Point X="5.875" Y="7.031" />
+        <Point X="8" Y="7.031" />
+      </Path>
+    </AssociationLine>
+    <AssociationLine Name="MotionEstimator" Type="RPLIDAR_Mapping.Features.Map.Algorithms.MotionEstimator" FixedFromPoint="true" FixedToPoint="true">
+      <Path>
+        <Point X="6.125" Y="6" />
+        <Point X="6.125" Y="5.574" />
+        <Point X="8" Y="5.574" />
+      </Path>
+    </AssociationLine>
+    <AssociationLine Name="_tileMerge" Type="RPLIDAR_Mapping.Features.Map.Algorithms.TileMerge" FixedFromPoint="true" FixedToPoint="true">
+      <Path>
+        <Point X="6.25" Y="6.375" />
+        <Point X="6.625" Y="6.375" />
+        <Point X="6.625" Y="6.281" />
+        <Point X="8" Y="6.281" />
+      </Path>
+    </AssociationLine>
+    <AssociationLine Name="_gridManager" Type="RPLIDAR_Mapping.Features.Map.GridModel.GridManager" FixedFromPoint="true" FixedToPoint="true">
+      <Path>
+        <Point X="5.25" Y="6.562" />
+        <Point X="5.25" Y="6.937" />
+        <Point X="5.219" Y="6.937" />
+        <Point X="5.219" Y="7.5" />
+      </Path>
+    </AssociationLine>
+    <TypeIdentifier>
+      <HashCode>SAQaACIa0AhRIAAAkQkQIAChKiEAoEAIAAiAAACYMFA=</HashCode>
+      <FileName>Features\Map\Map.cs</FileName>
+    </TypeIdentifier>
+    <ShowAsAssociation>
+      <Field Name="_tileTrustRegulator" />
+      <Field Name="MotionEstimator" />
+      <Property Name="_device" />
+      <Property Name="_tileMerge" />
+      <Property Name="_gridManager" />
+    </ShowAsAssociation>
+  </Class>
+  <Class Name="RPLIDAR_Mapping.Features.Map.Algorithms.TileTrustRegulator" Collapsed="true">
+    <Position X="8" Y="6.75" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>IAQIABAJgQFAAAAEAAYAAAAAADAAAAIQCgAAIEAAkAQ=</HashCode>
+      <FileName>Features\Map\Algorithms\TileTrustRegulator.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="RPLIDAR_Mapping.Features.Map.Algorithms.MotionEstimator" Collapsed="true">
+    <Position X="8" Y="5.25" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAiCAAAIAABAEBAAAACAAYAICAIAAIAAgAAAAAABEA=</HashCode>
+      <FileName>Features\Map\Algorithms\DevicePositionEstimator.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="RPLIDAR_Mapping.Features.Map.GridModel.GridManager" Collapsed="true">
+    <Position X="4.25" Y="7.5" Width="1.5" />
+    <Compartments>
+      <Compartment Name="Properties" Collapsed="true" />
+      <Compartment Name="Methods" Collapsed="true" />
+    </Compartments>
+    <TypeIdentifier>
+      <HashCode>BAQIABAAAQABAAAAQQAEQAAAEIAIAYAAAUAAAAAASAQ=</HashCode>
+      <FileName>Features\Map\GridModel\GridManager.cs</FileName>
+    </TypeIdentifier>
+    <ShowAsAssociation>
+      <Field Name="_map" />
+    </ShowAsAssociation>
+  </Class>
+  <Class Name="RPLIDAR_Mapping.Features.Map.Algorithms.TileMerge" Collapsed="true">
+    <Position X="8" Y="6" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>jBQATAWKgWgAIQgJAQCBTSAACwQBgCiYiMJGIwAQAAA=</HashCode>
+      <FileName>Features\Map\Algorithms\TileMerge.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="RPLIDAR_Mapping.Features.Communications.Device" Collapsed="true">
+    <Position X="6.5" Y="4" Width="1.5" />
+    <AssociationLine Name="_communication" Type="RPLIDAR_Mapping.Interfaces.ICommunication" FixedFromPoint="true" FixedToPoint="true">
+      <Path>
+        <Point X="7.75" Y="4" />
+        <Point X="7.75" Y="3.346" />
+        <Point X="8" Y="3.346" />
+      </Path>
+    </AssociationLine>
+    <TypeIdentifier>
+      <HashCode>GA0AAAAgEDAEAABQCMAQMIICAggAAAAwIAAABIAADwA=</HashCode>
+      <FileName>Features\Communications\Device.cs</FileName>
+    </TypeIdentifier>
+    <ShowAsAssociation>
+      <Field Name="_communication" />
+    </ShowAsAssociation>
+    <Lollipop Position="0.2" />
+  </Class>
+  <Class Name="RPLIDAR_Mapping.Features.Map.GridModel.Grid" Collapsed="true">
+    <Position X="4.25" Y="8.5" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>BBQOgAQAAWiYAIAUBAAAAQEAAgAAAiAEAQAYAAEICAw=</HashCode>
+      <FileName>Features\Map\GridModel\Grid.cs</FileName>
+    </TypeIdentifier>
+    <ShowAsAssociation>
+      <Field Name="GridManager" />
+    </ShowAsAssociation>
+  </Class>
+  <Class Name="RPLIDAR_Mapping.Features.Map.GridModel.Tile" Collapsed="true">
+    <Position X="4.25" Y="9.5" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAEGKkoAAIABIog1EwACAIUAAAjAAABIgAAAFAJQaAQ=</HashCode>
+      <FileName>Features\Map\GridModel\Tile.cs</FileName>
+    </TypeIdentifier>
+    <ShowAsAssociation>
+      <Property Name="_selfGrid" />
+    </ShowAsAssociation>
+  </Class>
+  <Class Name="RPLIDAR_Mapping.Features.Map.UI.Camera" Collapsed="true">
+    <Position X="2.25" Y="4.25" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>ABAAQCAABEAAABAgEAAACAJAAABEgEAAgAAABAAAUBA=</HashCode>
+      <FileName>Features\Map\UI\Camera.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="RPLIDAR_Mapping.Features.Communications.SerialCom" Collapsed="true">
+    <Position X="9.5" Y="2.75" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAQAAQIQACBAAABAAEQEKIAgAoAABgAQAAAAFAACAgg=</HashCode>
+      <FileName>Features\Communications\SerialCom.cs</FileName>
+    </TypeIdentifier>
+    <Lollipop Position="0.132" />
+  </Class>
+  <Class Name="RPLIDAR_Mapping.Features.Communications.Wireless" Collapsed="true">
+    <Position X="9.5" Y="3.75" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAQAAAAAASAAgABACEAEAIEQAAAAAAQwQCAAFAACAgA=</HashCode>
+      <FileName>Features\Communications\Wireless.cs</FileName>
+    </TypeIdentifier>
+    <Lollipop Position="0.2" />
+  </Class>
+  <Interface Name="RPLIDAR_Mapping.Interfaces.ICommunication" Collapsed="true">
+    <Position X="8" Y="3" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAQAAAAAAAAAAABAAEAEAIAAAAAAAAAQAAAAFAAAAgA=</HashCode>
+      <FileName>Interfaces\ICommunication.cs</FileName>
+    </TypeIdentifier>
+  </Interface>
+  <Font Name="Segoe UI" Size="9" />
+</ClassDiagram>

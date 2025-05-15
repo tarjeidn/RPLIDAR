@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO.Ports;
+using System.Linq;
 using System.Threading;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -17,10 +18,10 @@ namespace RPLIDAR_Mapping.Features.Communications
     private ICommunication _communication;
     public LidarSettings _LidarSettings;
     public ConnectionParams _ConnectionParams;
-    public GuiManager _GuiManager;
     private SerialPort _serialPort; //  Keep a direct reference to Serial
     private Thread _serialListenerThread; //  Background thread for Serial reading
     private bool _isListeningSerial = false; //  Flag to control serial listening
+    public GuiManager _GuiManager;
     public Rectangle _deviceRect {  get; private set; }
     public Vector2 _devicePosition { get; set; }
     public long lastVelocityTimestamp { get; set; }
@@ -29,8 +30,13 @@ namespace RPLIDAR_Mapping.Features.Communications
     public float _deviceOrientation { get; set; }
     private const int DeviceWidth = 20; 
     private const int DeviceHeight = 20;
-    public Queue<(Vector2 position, float timestamp)> _positionHistory= new ();
-    public int MaxHistoryLength = 10;
+
+
+
+    private readonly Queue<Vector2> _positionHistory = new();
+    private const float MinDistanceThreshold = 50f; // e.g. 10mm or 1cm
+    private const int MaxHistoryLength = 200;
+    public IReadOnlyList<Vector2> PositionHistory => _positionHistory.ToList();
     public Device(ConnectionParams connectionParameters, GuiManager gm)
     {
       string communicationType = connectionParameters.ConnectionType;
@@ -72,22 +78,22 @@ namespace RPLIDAR_Mapping.Features.Communications
 
       _LidarSettings = new LidarSettings();
 
-
+      _positionHistory.Enqueue(_devicePosition); // Add initial position to history
 
     }
-    public void UpdateDevicePosition(Vector2 velocity, uint timeStamp)
+    public void UpdatePositionHistory(Vector2 newPos)
     {
-      if (timeStamp - lastVelocityTimestamp < 0) return;
+      // Only add to history if moved enough
+      if (_positionHistory.Count == 0 || Vector2.Distance(_positionHistory.Last(), newPos) > MinDistanceThreshold)
+      {
+        _positionHistory.Enqueue(newPos);
 
-      float deltaTimeSec = (timeStamp - lastVelocityTimestamp) / 1000.0f;
-      Vector2 convertedVelocity = new Vector2(-velocity.X, velocity.Y);
+        // Keep history bounded
+        if (_positionHistory.Count > MaxHistoryLength)
+          _positionHistory.Dequeue();
+      }
 
-      Vector2 movement = convertedVelocity * deltaTimeSec;
-
-      _devicePosition += movement;
-
-      lastVelocity = velocity;
-      lastVelocityTimestamp = timeStamp;
+      
     }
 
     public void SetDevicePosition(Vector2 newPos)

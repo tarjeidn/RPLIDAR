@@ -34,7 +34,7 @@ namespace RPLIDAR_Mapping.Features.Communications
     private string _packetType = null;
     public event Action<string> OnMessageReceived;
     private StringBuilder _textLineBuffer = new StringBuilder();
-
+    private bool _receivedSetupComplete = false;
     // Thread-safe queue to store incoming LiDAR data as DataPoint
     private ConcurrentQueue<DataPoint> _dataQueue = new ConcurrentQueue<DataPoint>();
 
@@ -79,9 +79,33 @@ namespace RPLIDAR_Mapping.Features.Communications
       {
         _serialPort.WriteLine("SET_MODE:SERIAL");
         Log("Sent 'SET_MODE:SERIAL' to Arduino.");
-        SendWiFiSettings(_connectionParams.WiFiSSID, _connectionParams.WiFiPW);
+        //SendWiFiSettings(_connectionParams.WiFiSSID, _connectionParams.WiFiPW);
       }
     }
+    //public void InitializeMode()
+    //{
+    //  if (_serialPort.IsOpen)
+    //  {
+    //    Task.Run(async () =>
+    //    {
+    //      int retries = 0;
+    //      const int maxRetries = 20;
+
+    //      while (!_receivedSetupComplete && retries < maxRetries)
+    //      {
+    //        _serialPort.WriteLine("SET_MODE:SERIAL");
+    //        Log($"[Retry {retries + 1}] Sent 'SET_MODE:SERIAL' to Arduino.");
+    //        await Task.Delay(250);
+    //        retries++;
+    //      }
+
+    //      if (!_receivedSetupComplete)
+    //      {
+    //        Log("⚠ Arduino did not respond with 'Setup complete'.");
+    //      }
+    //    });
+    //  }
+    //}
 
     public void Connect()
     {
@@ -100,6 +124,7 @@ namespace RPLIDAR_Mapping.Features.Communications
               testPort.Open();
               _connectionParams.SerialPort = port;
               Log($"Found and switched to available port: {port}");
+              InitializeMode();
               testPort.Close();
               break;
             }
@@ -130,6 +155,7 @@ namespace RPLIDAR_Mapping.Features.Communications
         _serialPort.Open();
 
         Log($"Serial Port {_connectionParams.SerialPort} Reconnected");
+        InitializeMode();
       } catch (Exception ex)
       {
         Log($"Failed to reconnect serial port: {ex.Message}");
@@ -155,7 +181,7 @@ namespace RPLIDAR_Mapping.Features.Communications
             if (!string.IsNullOrEmpty(response))
             {
               _connectionParams.SerialPort = port;
-              //_serialPort.PortName = port;
+              _serialPort.PortName = port;
               testPort.Close();
               Log($"Found and switched to available port: {port}");
               return port;
@@ -307,10 +333,10 @@ namespace RPLIDAR_Mapping.Features.Communications
               _packetType = null;
             }
 
-            continue; // ✅ Don't mix with string parsing
+            continue; //  Don't mix with string parsing
           }
 
-          // 🔍 Detect new packet
+          //  Detect new packet
           if (_serialBuffer.Count == 0 && b == 0xFF)
           {
             _serialBuffer.Add(b);
@@ -334,6 +360,10 @@ namespace RPLIDAR_Mapping.Features.Communications
             if (!string.IsNullOrEmpty(msg))
             {
               OnMessageReceived?.Invoke($"Serial: {msg}");
+              if (msg.Contains("Setup complete"))
+              {
+                _receivedSetupComplete = true;
+              }
             }
 
             _textLineBuffer.Clear();
@@ -349,7 +379,7 @@ namespace RPLIDAR_Mapping.Features.Communications
       } catch (Exception ex)
       {
         OnMessageReceived?.Invoke($"Serial Error: {ex.Message}");
-        Debug.WriteLine($"❌ Error in SerialPort_DataReceived: {ex.Message}");
+        Debug.WriteLine($" Error in SerialPort_DataReceived: {ex.Message}");
         _serialBuffer.Clear();
         _isReceivingPacket = false;
         _packetType = null;

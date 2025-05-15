@@ -51,6 +51,7 @@ namespace RPLIDAR_Mapping.Features.Map
     public bool DrawCycleActive = false;
     public bool DrawSightLines { get; set; } = false;
     public bool DrawTilesToMap { get; set; } = true;
+    public bool drawNeighbourLinks;
     public bool DrawRingTilesToMap { get; set; } = false;
     public Vector2 MainScreenSize;
     public Device _device;
@@ -81,6 +82,18 @@ namespace RPLIDAR_Mapping.Features.Map
     public void Update()
     {
 
+    }
+    public void DrawDevicePath(SpriteBatch spriteBatch, Camera camera)
+    {
+      var history = _device.PositionHistory;
+
+      for (int i = 1; i < history.Count; i++)
+      {
+        Vector2 screenA = camera.WorldToScreen(history[i - 1]);
+        Vector2 screenB = camera.WorldToScreen(history[i]);
+
+        DrawingHelperFunctions.DrawLine(spriteBatch, screenA, screenB, Color.CadetBlue, 2);
+      }
     }
 
 
@@ -210,6 +223,7 @@ namespace RPLIDAR_Mapping.Features.Map
       if (_TileMerge.DrawMergedLines && _TileMerge.ComputeMergedLines) DrawMergedLines(sourceBounds);
 
       DrawSelection(sourceBounds);
+      DrawDevicePath(_SpriteBatch, _Camera);
       if (_map.PermanentLines.Count > 0) DrawPermanentLines(sourceBounds);
       if (_TileMerge.DrawMergedTiles) DrawClusterBoundingRectangles();
       _SpriteBatch.End();
@@ -282,7 +296,7 @@ namespace RPLIDAR_Mapping.Features.Map
       _SpriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp, null, null);
       DrawDevice(deviceScreenPos);
       DrawGrids(_device._devicePosition, 200); // Draw tiles in batches
-      DrawAngularLinks();
+      if(drawNeighbourLinks) DrawAngularLinks();
       _SpriteBatch.End();
       _GraphicsDevice.SetRenderTarget(null);
     }
@@ -318,7 +332,7 @@ namespace RPLIDAR_Mapping.Features.Map
     {
       foreach (var cluster in _TileMerge.TileClusters)
       {
-        // ✅ Only draw if it has enough tiles and size
+        //  Only draw if it has enough tiles and size
         if (cluster.Tiles.Count < 5)
           continue; // Too small, skip
 
@@ -330,7 +344,7 @@ namespace RPLIDAR_Mapping.Features.Map
         float scale = MapScaleManager.Instance.ScaleFactor;
         Vector2 sizeScreen = (cluster.BoundsSize / scale) * _Camera.Zoom;
 
-        // ✅ Extra check to avoid NaN / weirdness
+        //  Extra check to avoid NaN / weirdness
         if (float.IsNaN(centerScreen.X) || float.IsNaN(centerScreen.Y) ||
             float.IsNaN(sizeScreen.X) || float.IsNaN(sizeScreen.Y))
           continue;
@@ -344,7 +358,7 @@ namespace RPLIDAR_Mapping.Features.Map
         Vector2 bottomRight = Vector2.Transform(new Vector2(halfSize.X, halfSize.Y), rotationMatrix) + centerScreen;
         Vector2 bottomLeft = Vector2.Transform(new Vector2(-halfSize.X, halfSize.Y), rotationMatrix) + centerScreen;
 
-        // ✅ Draw lines between corners
+        //  Draw lines between corners
         DrawingHelperFunctions.DrawLine(_SpriteBatch, topLeft, topRight, Color.White, 2);
         DrawingHelperFunctions.DrawLine(_SpriteBatch, topRight, bottomRight, Color.White, 2);
         DrawingHelperFunctions.DrawLine(_SpriteBatch, bottomRight, bottomLeft, Color.White, 2);

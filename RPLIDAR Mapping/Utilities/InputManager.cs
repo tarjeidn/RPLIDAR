@@ -21,6 +21,8 @@ namespace RPLIDAR_Mapping.Utilities
     private Device _device;
     private UserSelection _UserSelection;
     private MouseState _previousMouseState;
+    private bool _isPanning = false;
+    private Vector2 _lastMousePosition;
 
     public InputManager(Device device)
     {
@@ -74,6 +76,31 @@ namespace RPLIDAR_Mapping.Utilities
         // Finish selection
         _UserSelection.isSelecting = false;
         _UserSelection.HighlightClustersInSelection(ctrlHeld);
+      }
+      // Right mouse button panning
+      if (mouse.RightButton == ButtonState.Pressed)
+      {
+        if (!_isPanning)
+        {
+          _isPanning = true;
+          _lastMousePosition = new Vector2(mouse.X, mouse.Y);
+        }
+        else
+        {
+          Vector2 currentMousePosition = new Vector2(mouse.X, mouse.Y);
+          Vector2 mouseDelta = currentMousePosition - _lastMousePosition;
+
+          // Convert pixel delta to world-space delta
+          Vector2 worldDelta = UtilityProvider.Camera.ScreenToWorld(_lastMousePosition) -
+                               UtilityProvider.Camera.ScreenToWorld(currentMousePosition);
+
+          UtilityProvider.Camera.Position += worldDelta;
+          _lastMousePosition = currentMousePosition;
+        }
+      }
+      else
+      {
+        _isPanning = false;
       }
       _previousMouseState = mouse;
     }

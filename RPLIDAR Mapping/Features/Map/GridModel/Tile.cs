@@ -160,7 +160,7 @@ namespace RPLIDAR_Mapping.Features.Map.GridModel
 
       int tileSize = MapScaleManager.Instance.ScaledTileSizePixels;
 
-      // ❌ DON'T cache the screen rect
+      //  DON'T cache the screen rect
       Rectangle rect = new Rectangle(
           (int)(screenPos.X - tileSize / 2f),
           (int)(screenPos.Y - tileSize / 2f),

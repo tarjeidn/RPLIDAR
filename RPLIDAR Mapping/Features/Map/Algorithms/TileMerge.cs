@@ -115,7 +115,7 @@ namespace RPLIDAR_Mapping.Features.Map.Algorithms
           {
             ClusterTrustedTiles(_map.NewTiles);
             _map.NewTiles.Clear();
-            ClustersChanged = true; // ✅ New points -> clusters changed
+            ClustersChanged = true; //  New points -> clusters changed
           }
           CurrentState = MergeState.MergingClusters;
           break;
@@ -125,7 +125,7 @@ namespace RPLIDAR_Mapping.Features.Map.Algorithms
           {
             int maxSearchDistance = mergeClusterRadius * _tileSize;
             FastMergeOverlappingClusters(UpdatedClusters, maxSearchDistance);
-            ClustersChanged = true; // ✅ Merging -> clusters changed
+            ClustersChanged = true; //  Merging -> clusters changed
           }
           CurrentState = MergeState.SplittingClusters;
           break;
@@ -135,7 +135,7 @@ namespace RPLIDAR_Mapping.Features.Map.Algorithms
           {
             SplitClusters();
             framesSinceLastSplit = 0;
-            ClustersChanged = true; // ✅ Splitting -> clusters changed
+            ClustersChanged = true; //  Splitting -> clusters changed
           }
           else framesSinceLastSplit++;
           CurrentState = MergeState.ComputingRects;
@@ -147,7 +147,7 @@ namespace RPLIDAR_Mapping.Features.Map.Algorithms
             cluster.Update();
             cluster.ComputeSightWindow(UtilityProvider.Device._devicePosition);
           }
-          ClustersChanged = false; // ✅ Reset after updating
+          ClustersChanged = false; //  Reset after updating
           CurrentState = MergeState.ComputeClusterShift;
           break;
 
@@ -319,7 +319,7 @@ namespace RPLIDAR_Mapping.Features.Map.Algorithms
         float angleDelta = Utility.NormalizeAngle(angleNow - cluster.ExpectedAngle);
         float distDelta = distNow - cluster.ExpectedDistance;
 
-        //Debug.WriteLine("🔍 Cluster Shift Check:");
+        //Debug.WriteLine(" Cluster Shift Check:");
         //Debug.WriteLine($"• Cluster Center        : {cluster.Center}");
         //Debug.WriteLine($"• Device Position       : {devicePos}");
         //Debug.WriteLine($"• Expected Angle        : {MathHelper.ToDegrees(cluster.ExpectedAngle):0.00}°");
@@ -334,11 +334,11 @@ namespace RPLIDAR_Mapping.Features.Map.Algorithms
         //if (Math.Abs(angleDelta) > cluster.ExpectedSpan / 2f ||
         //    Math.Abs(distDelta) > maxDistanceDrift)
         //{
-        //  Debug.WriteLine("⚠️  Cluster OUTSIDE sight cone — possible movement.");
+        //  Debug.WriteLine("  Cluster OUTSIDE sight cone — possible movement.");
         //}
         //else
         //{
-        //  Debug.WriteLine("✅ Cluster within expected view.");
+        //  Debug.WriteLine(" Cluster within expected view.");
         //}
 
         //Debug.WriteLine(""); // Empty line for readability
@@ -358,14 +358,14 @@ namespace RPLIDAR_Mapping.Features.Map.Algorithms
       int maxSearchDistance = mergeTileRadius * _tileSize;
 
       // **Step 1: Remove outdated clusters**
-      // **✅ Step 1: Remove Empty Clusters & Their Lines**
+      // ** Step 1: Remove Empty Clusters & Their Lines**
       TileClusters.RemoveAll(cluster =>
       {
         if (cluster.Tiles.Count == 0)
         {
-          // ✅ Find and remove any merged line associated with this cluster
+          //  Find and remove any merged line associated with this cluster
           _mergedLines.RemoveAll(line => line.ParentCluster == cluster);
-          return true; // ✅ Remove the cluster
+          return true; //  Remove the cluster
         }
         return false;
       });
@@ -557,7 +557,7 @@ namespace RPLIDAR_Mapping.Features.Map.Algorithms
         if (Vector2.Distance(line.Start, tile.GlobalCenter) < 50f ||
             Vector2.Distance(line.End, tile.GlobalCenter) < 50f)
         {
-          return true; // ✅ Line already exists for this cluster
+          return true; //  Line already exists for this cluster
         }
       }
       return false;
